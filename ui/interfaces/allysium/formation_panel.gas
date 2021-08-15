@@ -1,0 +1,316 @@
+/////////////////////////////////////////////////////////////////////////////
+//
+// File        :  formation_panel.gas
+// Author(s)   :  Major Hostility
+// Description :
+//
+//
+//----------------------------------------------------------------------------
+// $Version: 0.01												$Date: 2003.12.07
+//----------------------------------------------------------------------------
+//
+// Version History:
+//
+//
+//   0.01	2003.12.07 (mh)										first pass
+//
+//
+///////////////////////////////////////////////////////////////////////////////
+
+
+
+
+[formation_panel]
+{
+  b interface = true;
+	intended_resolution_width = 640;
+	intended_resolution_height = 480;
+
+
+	skrit =
+	[[
+		owner = UIWindow;
+//		string skrit_name$ = "formation_panel.gas";
+
+
+		string var_string$;
+		#include "k_inc_sfx_utils"
+
+
+		change_formation$()
+		{
+			if (!UIShell.IsInterfaceVisible(owner.InterfaceParent)) { return; }
+//			report.genericf("changing [%s]\n",owner.name);
+			set_radio_value$(owner.name, "field_commands", true);
+		}
+
+		draw_button_up$()
+		{
+			float	left$ = 22.0*owner.index/256;
+			float	right$ = 22.0*(owner.index+1)/256;
+
+			owner.SetUVRect(left$,right$,0.000,0.086);
+		}
+		draw_button_hover$()
+		{
+			float	left$ = 22.0*owner.index/256;
+			float	right$ = 22.0*(owner.index+1)/256;
+
+			owner.SetUVRect(left$,right$,0.086,0.172);
+		}
+		draw_button_down$()
+		{
+			float	left$ = 22.0*owner.index/256;
+			float	right$ = 22.0*(owner.index+1)/256;
+
+			owner.SetUVRect(left$,right$,0.172,0.258);
+		}
+
+
+		check_button$(string name$)
+		{
+			eUIMessage	msg_up$ = MSG_ONUNCHECK;
+			eUIMessage	msg_down$ = MSG_ONCHECK;
+
+			UIShell.SendUIMessage(get_radio_value$(name$, "field_commands") ? msg_down$ : msg_up$, name$, owner.InterfaceParent);
+		}
+		check_buttons$()
+		{
+			check_button$("button_formation_row");
+			check_button$("button_formation_double_row");
+			check_button$("button_formation_column");
+			check_button$("button_formation_double_column");
+			check_button$("button_formation_pyramid");
+			check_button$("button_formation_circle");
+		}
+
+		notify_ai_panel$()
+		{
+			UIShell.SendUIMessage(MSG_ONCHECK, "message_handler", "ai_panel");
+		}
+		show$
+		{
+			int left$ = UIShell.ScreenWidth - owner.width - 4;
+			int top$ = UIShell.ScreenHeight - 60 - owner.height;
+
+			if (owner.left != left$ || owner.top != top$) { UIShell.ShiftInterface(owner.InterfaceParent, left$ - owner.left, top$ - owner.top); }
+
+			check_buttons$();
+			UIShell.ShowInterface(owner.InterfaceParent);
+
+			notify_ai_panel$();
+		}
+		refresh$
+		{
+			if (UIShell.IsInterfaceVisible(owner.InterfaceParent)) { show$(); }
+		}
+		hide$
+		{
+			UIShell.HideInterface(owner.InterfaceParent);			
+
+			notify_ai_panel$();
+		}
+
+		init$
+		{
+		}
+	]];
+
+
+	[t:dialog_box,n:message_handler]
+	{
+		draw_order = 10;
+		rect = 0,0,43,204;
+		texture = b_gui_ally_panels;
+		uvcoords = 0.832, 0.203, 1.000, 1.000;
+
+		[messages]
+		{
+			oncreated = call(init$);
+
+			oncheck = call(refresh$);
+			onuncheck = call(hide$) & playsound(s_e_frontend_tiny_button_aym);
+			onforcecheck = call(show$) & playsound(s_e_frontend_tiny_button_aym);
+		}
+	}
+
+
+	[t:radio_button,n:button_formation_row]
+	{
+		draw_order = 11;
+		rect = 13,9,35,31;
+		is_common_control = false;
+		radio_group = fp_radio_formations;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 0;
+		rollover_help = formation_row;
+
+		[messages]
+		{
+			oncheck			= call(draw_button_down$) & call(change_formation$);
+			onuncheck		= call(draw_button_up$);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:radio_button,n:button_formation_double_row]
+	{
+		draw_order = 11;
+		rect = 13,36,35,58;
+		is_common_control = false;
+		radio_group = fp_radio_formations;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 1;
+		rollover_help = formation_double_row;
+
+		[messages]
+		{
+			oncheck			= call(draw_button_down$) & call(change_formation$);
+			onuncheck		= call(draw_button_up$);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:radio_button,n:button_formation_column]
+	{
+		draw_order = 11;
+		rect = 13,63,35,85;
+		is_common_control = false;
+		radio_group = fp_radio_formations;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 2;
+		rollover_help = formation_column;
+
+		[messages]
+		{
+			oncheck			= call(draw_button_down$) & call(change_formation$);
+			onuncheck		= call(draw_button_up$);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:radio_button,n:button_formation_double_column]
+	{
+		draw_order = 11;
+		rect = 13,90,35,112;
+		is_common_control = false;
+		radio_group = fp_radio_formations;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 3;
+		rollover_help = formation_double_column;
+
+		[messages]
+		{
+			oncheck			= call(draw_button_down$) & call(change_formation$);
+			onuncheck		= call(draw_button_up$);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:radio_button,n:button_formation_pyramid]
+	{
+		draw_order = 11;
+		rect = 13,117,35,139;
+		is_common_control = false;
+		radio_group = fp_radio_formations;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 4;
+		rollover_help = formation_pyramid;
+
+		[messages]
+		{
+			oncheck			= call(draw_button_down$) & call(change_formation$);
+			onuncheck		= call(draw_button_up$);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:radio_button,n:button_formation_circle]
+	{
+		draw_order = 11;
+		rect = 13,144,35,166;
+		is_common_control = false;
+		radio_group = fp_radio_formations;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 5;
+		rollover_help = formation_circle;
+
+		[messages]
+		{
+			oncheck			= call(draw_button_down$) & call(change_formation$);
+			onuncheck		= call(draw_button_up$);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:button,n:button_disband]
+	{
+		draw_order = 11;
+		rect = 13,171,35,193;
+		is_common_control = false;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 6;
+		rollover_help = button_disband;
+
+		[messages]
+		{
+			onbuttonpress	= notify(disband_selected_members);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:window,n:button_x]
+	{
+		alpha = 0.0;
+		draw_order = 12;
+		rect = 0,95,10,107;
+		rollover_help = close_formation;
+
+		texture = b_gui_ally_panels;
+		uvcoords = 0.793, 0.953, 0.832, 1.000;
+
+		[messages]
+		{
+			onlbuttonup = call(hide$) & playsound(s_e_frontend_tiny_button_aym);
+
+			onrollover = setalpha(1.0);
+			onrolloff = setalpha(0.0);
+		}
+	}
+}

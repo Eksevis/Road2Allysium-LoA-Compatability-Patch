@@ -1,0 +1,1105 @@
+/////////////////////////////////////////////////////////////////////////////
+//
+// File        :  dialogue_box.gas
+// Author(s)   :  GPG, Major Hostility
+// Description :
+//
+//
+//----------------------------------------------------------------------------
+// $Version: 0.17												$Date: 2005.08.02
+//----------------------------------------------------------------------------
+//
+// Version History:
+//
+//
+//   0.17	2005.08.02 (mh)										added [play_sound] macro
+//
+//   0.16	2005.07.31 (mh)										[award_gold] can now be negative
+//
+//   0.15	2004.08.08 (mh)										some quest macros should add text to dialog box
+//
+//   0.14	2004.06.29 (mh)										added [PLAYER] macro
+//
+//   0.13	2004.06.28 (mh)										added [NAME] macro
+//
+//   0.12	2004.06.27 (mh)										no longer erasing default dialog box text
+//
+//   0.11	2004.06.06 (mh)										migrated quest logic into talk skrit
+//
+//   0.10	2004.04.30 (mh)										added [item_give], [award_gold], [award_xp]
+//
+//   0.09	2004.04.29 (mh)										added [item_take]
+//
+//   0.08	2004.04.28 (mh)										added [item_check] support
+//
+//   0.07	2004.04.27 (mh)										added additional quest state checking
+//
+//   0.06	2003.12.15 (mh)										added [BUY_PACKMULE]
+//
+//   0.05	2003.12.12 (mh)										converted choices to text boxes to support wrapping
+//																added [MORE], [VIEW] and [ACCEPT] support
+//
+//   0.04	2003.12.11 (mh)										converted to send all text to dialog panel in data_bar interface
+//
+//   0.03	2003.12.06 (mh)										added messages to data_bar to open/close frame
+//
+//   0.02	2003.10.01 (mh)										added support for [FIGHT] option
+//
+//   0.01	2003.09.15 (mh)										started working on Allysium conversation interface
+//
+//
+///////////////////////////////////////////////////////////////////////////////
+
+
+
+
+[dialogue_box]
+{
+	intended_resolution_height = 480;
+	intended_resolution_width = 640;
+  b interface = true;
+
+
+	skrit =
+	[[
+		owner = UIWindow;
+		string skrit_name$ = "dialogue_box.gas";
+
+
+		button_press$()
+		{
+//			report.genericf("%s: button_press$(%d)\n",skrit_name$,owner.index);
+
+//			if (!GameAuditor.GetDb.GetBool("conversation_active")) { return; }
+			// this doesn't work well if the cursor is over the choice when
+			// the box opens ...
+
+
+			// why do I need this ???
+			owner.visible = true;
+
+
+			// set up choice prefix
+			string choice$;
+			StringTool.AssignF(choice$,"%08X_choice_",GameAuditor.GetDb.GetInt("conversation_scid"));
+
+
+			string s1$ = StringTool.GetDelimitedString2(GameAuditor.GetDb.GetString("dialogue_box_choices"),owner.index,';');
+			string s2$ = StringTool.GetDelimitedString2(s1$,0,'=');
+			s1$ = StringTool.GetDelimitedString2(s1$,1,'=');
+//			report.genericf("%s: choice %d is [%s]\n",skrit_name$,owner.index,s1$);
+
+
+			bool skip$ = false;
+
+			if (StringTool.Left(s1$,6) == "[MORE]")
+			{
+				s1$ = StringTool.Right(s1$, StringTool.StringLength(s1$)-6);
+
+				// don't embed any text for 'more' choices - disabled 06/28
+				// skip$ = true;
+			} else if (StringTool.Left(s1$,6) == "[SHOP]")
+			{
+				GameAuditor.GetDb.SetBool("allysium_forge",false);
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_shop", owner.InterfaceParent);
+				
+				s1$ = "[DONE]";
+			} else if (StringTool.Left(s1$,7) == "[FORGE]")
+			{
+				GameAuditor.GetDb.SetBool("allysium_forge",true);
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_shop", owner.InterfaceParent);
+				
+				s1$ = "[DONE]";
+			} else if (StringTool.Left(s1$,6) == "[VIEW]")
+			{
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_stats", owner.InterfaceParent);
+				return;
+			} else if (StringTool.Left(s1$,8) == "[ACCEPT]")
+			{
+				s1$ = StringTool.Right(s1$, StringTool.StringLength(s1$)-8);
+				if (StringTool.Left(s1$,6) == "[DONE]")
+				{
+					s1$ = StringTool.Right(s1$, StringTool.StringLength(s1$)-6);
+					UIDialogueHandler.RSSetButtonValue(choice$+"done");
+				}
+
+				UIDialogueHandler.RSSetButtonValue(choice$+s1$);
+//				report.genericf("%s: setting [%s]\n",skrit_name$,choice$+s1$);
+
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_accept", owner.InterfaceParent);
+				return;
+			} else if (StringTool.Left(s1$,9) == "[DECLINE]")
+			{
+				s1$ = StringTool.Right(s1$, StringTool.StringLength(s1$)-9);
+
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_decline", owner.InterfaceParent);
+			} else if (StringTool.Left(s1$,14) == "[BUY_PACKMULE]")
+			{
+				s1$ = StringTool.Right(s1$, StringTool.StringLength(s1$)-14);
+				
+				bool enabled$ = false;
+
+				UIWindow wnd$ = UIShell.FindUIWindow("button_buy_packmule", owner.InterfaceParent);
+				if (wnd$ != null)
+				{
+					UIButton btn$ = QueryDerivedButton(wnd$);
+					if (btn$ != null) { enabled$ = !btn$.disabled; }
+				}
+
+				if (!enabled$)
+				{
+					s1$ = StringTool.GetDelimitedString2(s1$,1,',');
+				} else
+				{
+					s1$ = StringTool.GetDelimitedString2(s1$,0,',');
+
+					GameAuditor.GetDb.SetBool("dialogue_keep_open",true);
+					UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_buy_packmule", owner.InterfaceParent);
+				}
+			}
+
+			if (!skip$)
+			{
+				// copy choice to conversation panel
+				GameAuditor.GetDb.SetString("allysium_dialog_text", "[INDENT][COLOR=0xFFF80000]" + s2$ + "\n");
+				UIShell.SendUIMessage(MSG_ONITEMPLACE, "message_handler", "data_bar");
+			}
+
+			if (StringTool.Left(s1$,6) == "[DONE]")
+			{
+				if (StringTool.StringLength(s1$) > 6)
+				{
+					s1$ = StringTool.Right(s1$,StringTool.StringLength(s1$)-6);
+					UIDialogueHandler.RSSetButtonValue(choice$+s1$);
+//					report.genericf("%s: setting [%s]\n",skrit_name$,choice$+s1$);
+				}
+
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_close", owner.InterfaceParent);
+			} else if (StringTool.Left(s1$,12) == "[QUEST_DONE]")
+			{
+				StringTool.AssignF(s2$,"%08X_quest_done",GameAuditor.GetDb.GetInt("conversation_scid"));
+
+				UIDialogueHandler.RSSetButtonValue(s2$);
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_close", owner.InterfaceParent);
+			} else if (StringTool.Left(s1$,7) == "[FIGHT]")
+			{
+				SCID scid$ = MakeScid(GameAuditor.GetDb.GetInt("conversation_scid"));
+				if (scid$ != null)
+				{
+					report.genericf("%s: switching %08X to evil\n",skrit_name$,scid$);
+
+					scid$.go.Actor.SSetAlignment( aa_evil );
+
+					scid$.go.Mind.SetMayAttack( true );
+					scid$.go.Mind.SetMayBeAttacked( true );
+				}
+
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_close", owner.InterfaceParent);
+			} else if (s1$ != "")
+			{
+				UIDialogueHandler.RSSetButtonValue(choice$+s1$);
+				report.genericf("%s: setting [%s]\n",skrit_name$,choice$+s1$);
+
+				GameAuditor.GetDb.SetBool("dialogue_keep_open",true);
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_more", owner.InterfaceParent);
+			}
+		}
+
+		choice_setcolor$(int line$, int color$)
+		{
+			string s1$;
+
+			StringTool.AssignF(s1$,"choice_%d",line$);
+			UIWindow wnd$ = UIShell.FindUIWindow(s1$, owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+//				UIText txt$ = QueryDerivedText(wnd$);
+//				if (txt$ != null) { txt$.color = color$; }
+				UITextBox tb$ = QueryDerivedTextBox(wnd$);
+				if (tb$ != null)
+				{
+					int	x$ = 0;
+					int	y$ = tb$.LineCount;
+
+					while (x$ < y$)
+					{
+						tb$.SetLineColor(x$,color$);
+						x$ += 1;
+					}
+				}
+			}
+		}
+
+		choice_rolloff$()  { choice_setcolor$(owner.index, GameAuditor.GetDb.GetInt("dialogue_choice_off")); }
+		choice_rollover$()
+		{
+			GameAuditor.GetDb.SetBool("conversation_active", true);
+			choice_setcolor$(owner.index, GameAuditor.GetDb.GetInt("dialogue_choice_on"));
+		}
+		num_rollover$()
+		{
+			GameAuditor.GetDb.SetBool("conversation_active", true);
+		}
+
+		clear_choices$()
+		{
+			GameAuditor.GetDb.SetInt("dialogue_choice_off", 0xfff80000);
+			GameAuditor.GetDb.SetInt("dialogue_choice_on",  0xFF80FF80);
+
+			GameAuditor.GetDb.SetInt("dialogue_box_choices_count",0);
+			GameAuditor.GetDb.SetString("dialogue_box_choices","");
+
+			string s1$;
+			UIWindow wnd$;
+
+			int x$ = 0;
+			while (x$ < 5)
+			{
+				StringTool.AssignF(s1$,"%d",x$);
+
+				wnd$ = UIShell.FindUIWindow("choice_"+s1$, owner.InterfaceParent);
+				if (wnd$ != null) { wnd$.visible = false; }
+
+				wnd$ = UIShell.FindUIWindow("choice_"+s1$+"_num", owner.InterfaceParent);
+				if (wnd$ != null) { wnd$.visible = false; }
+
+				x$ += 1;
+			}
+		}
+
+		check_gold$()
+		{
+			UIWindow wnd$ = UIShell.FindUIWindow("text_pack_cost", owner.InterfaceParent);
+			if (wnd$ == null) { return; }
+			if (!wnd$.visible) { return; }
+
+			UIWindow main$ = UIShell.FindUIWindow("dialog_border_left", "data_bar");
+			if (main$ == null) { return; }
+
+			wnd$.left = main$.left + 250;
+			wnd$.right = main$.left + 300;
+			wnd$.top = UIShell.ScreenHeight - 78;
+			wnd$.bottom = wnd$.top + 16;
+
+
+			wnd$ = UIShell.FindUIWindow("text_available_gold", owner.InterfaceParent);
+			if (wnd$ == null) { return; }
+
+			wnd$.left = main$.left + 30;
+			wnd$.right = main$.left + 280;
+			wnd$.top = UIShell.ScreenHeight - 78;
+			wnd$.bottom = wnd$.top + 16;
+		}
+
+
+		Go get_focused_party_member$()
+		{
+			int i$ = 0;
+			int j$ = Server.ScreenParty.Children.Size();
+			while ( i$ != j$ )
+			{
+				Go player$ = Server.ScreenParty.Children.Get(i$);
+				i$ += 1;
+
+				if (player$.IsFocused()) { return player$; }
+			}
+
+			return null;
+		}
+
+
+		show$()
+		{
+			UIShell.SendUIMessage(MSG_ONWHEELUP, "message_handler", "data_bar");
+
+			GameAuditor.GetDb.SetBool("conversation_active", false);
+			GameAuditor.GetDb.SetBool("dialogue_keep_open", false);
+
+			clear_choices$();
+
+			int		top$ = 0;
+			int		width$ = 300;
+			int		color$ = GameAuditor.GetDb.GetInt("dialogue_choice_off");
+
+			UIWindow wnd$ = UIShell.FindUIWindow("dialog_text", "data_bar");
+			if (wnd$ != null) { width$ = wnd$.width - 20; }
+
+			wnd$ = UIShell.FindUIWindow("dialogue_box", owner.InterfaceParent);
+			if (wnd$ == null) { return; }
+
+			UITextBox tb$ = QueryDerivedTextBox(wnd$);
+			if (tb$ == null) { return; }
+
+			int		x$ = 0;
+			int		y$ = tb$.LineCount;
+			int		choice$ = 0;
+			string	message$ = "";
+			string  updates$ = "";
+			int		updates_count$ = 0;
+
+			bool	branch_quick$ = false;
+			string	branch_conv$ = "";
+
+			while (x$ < y$)
+			{
+				string s1$ = tb$.GetLineText(x$);
+
+				// remove leading tab(s)
+				while (s1$ != "" && StringTool.Left(s1$,1) == "\t" || StringTool.Left(s1$,1) == " ") { s1$ = StringTool.Right(s1$,StringTool.StringLength(s1$)-1); }
+					
+				// report.genericf("%s: checking line %d:[%s]\n",skrit_name$,x$,s1$);
+				int name$ = StringTool.IndexOf(s1$,"[NAME]");
+				if (name$ != -1)
+				{
+					//report.genericf("%s: [NAME] macro found at %d\n",skrit_name$,name$);
+
+					Go talker$ = get_focused_party_member$();
+					if (talker$ != null)
+					{
+						string s2$;
+
+						talker$.common.GetScreenName(s2$);
+						s1$ = StringTool.Left(s1$,name$) + s2$ +
+							  StringTool.Right(s1$,StringTool.StringLength(s1$)-name$-6);
+					}					
+				}
+
+				name$ = StringTool.IndexOf(s1$,"[PLAYER]");
+				if (name$ != -1)
+				{
+					//report.genericf("%s: [PLAYER] macro found at %d\n",skrit_name$,name$);
+
+					Go player$ = Server.ScreenHero;
+					if (player$ != null)
+					{
+						string s2$;
+
+						player$.common.GetScreenName(s2$);
+						s1$ = StringTool.Left(s1$,name$) + s2$ +
+							  StringTool.Right(s1$,StringTool.StringLength(s1$)-name$-8);
+					}					
+				}
+				
+				if (StringTool.Left(s1$,8) == "[choice]")
+				{
+					//tb$.SetLineText(x$,"",0);
+
+					while ((StringTool.GetNumDelimitedValues(s1$,';') < 2) && (x$ < y$))
+					{
+						x$ += 1;
+
+						s1$ = s1$ + tb$.GetLineText(x$);
+					//	tb$.SetLineText(x$,"",0);
+					}
+
+					if (StringTool.GetNumDelimitedValues(s1$,'=') > 0)
+					{
+						string s2$ = StringTool.GetDelimitedString2(s1$,0,'=');
+						string s3$ = StringTool.GetDelimitedString2(StringTool.GetDelimitedString2(s1$,1,'='),0,';');
+
+						s2$ = StringTool.Right(s2$,StringTool.StringLength(s2$)-8);
+						bool auto_number$ = !(StringTool.Left(s3$,6) == "[MORE]");
+
+//						report.genericf("  [%s] [%s]\n",s2$,s3$);
+						GameAuditor.GetDb.SetString("dialogue_box_choices",GameAuditor.GetDb.GetString("dialogue_box_choices") + s2$+"="+s3$ + ";");
+
+
+						string num$;
+						StringTool.AssignF(num$,"%d",choice$);
+
+						wnd$ = UIShell.FindUIWindow("choice_"+num$, owner.InterfaceParent);
+						if (wnd$ != null)
+						{
+							UITextBox choice_box$ = QueryDerivedTextBox(wnd$);
+							if (choice_box$ != null)
+							{
+								int line$ = 0;
+
+//								if (auto_number$) { StringTool.AssignF(s2$,"   %d. %s",choice$+1, s2$); }
+//								else { StringTool.AssignF(s2$,"   %s",s2$); }
+
+								while (StringTool.StringWidth(s2$,15) > width$)
+								{
+									int w$ = 1;
+									int len$ = StringTool.StringLength(s2$);
+									string temp$;
+
+									// add characters until string is too wide
+									bool done$ = false;
+									while (!done$ && (w$ < len$))
+									{
+										temp$ = StringTool.Left(s2$,w$+1);
+										if (StringTool.StringWidth(temp$,15) < width$) { w$ += 1; }
+										else { done$ = true; }
+									}
+
+									// now back up to last space or period
+									done$ = false;
+									int w2$ = w$;
+									while (!done$ && (w2$ > 0))
+									{
+										temp$ = StringTool.Left(s2$,w2$);
+										if ((StringTool.Right(temp$,1) == " ") || (StringTool.Right(temp$,1) == ".")) { done$ = true; }
+										else { w2$ -= 1; }
+									}
+									if (w2$ != 0) { w$ = w2$; }
+									choice_box$.SetLineText(line$,temp$,color$);
+									line$ += 1;
+
+									s2$ = StringTool.Right(s2$,StringTool.StringLength(s2$)-w$);
+//									s2$ = "      " + s2$;
+								}
+
+								choice_box$.SetLineText(line$, s2$, color$);
+								line$ += 1;
+
+								wnd$.SetRect(0,width$,top$,top$+(line$ * choice_box$.ElementHeight),true);
+								wnd$.visible = true;
+
+
+								UIWindow label$ = UIShell.FindUIWindow("choice_"+num$+"_num",owner.InterfaceParent);
+								if (label$ != null)
+								{
+									if (auto_number$)
+									{
+										label$.SetRect(wnd$.left-20,wnd$.left-5,wnd$.top,wnd$.top+choice_box$.ElementHeight,true);
+										label$.visible = true;
+
+										StringTool.AssignF(s2$,"%d.",choice$+1);
+										UIText txt$ = QueryDerivedText(label$);
+										if (txt$ != null) { txt$.SetText(s2$, true); }
+									}
+								}
+
+								top$ += wnd$.height + 1;
+								GameAuditor.GetDb.SetInt("dialogue_box_choices_lines", top$ / choice_box$.ElementHeight);
+							}
+						}
+
+						choice$ += 1;
+					}
+				} else if ( StringTool.Left(s1$,6) == "[award" ||
+							StringTool.Left(s1$,6) == "[quest" ||
+							StringTool.Left(s1$,5) == "[item" ||
+							StringTool.Left(s1$,5) == "[scid" || 
+							StringTool.Left(s1$,12) == "[play_sound]" )
+				{
+					// don't show any quest macros
+
+					// report.genericf("%s: skipping macro\n",skrit_name$);
+					// tb$.SetLineText(x$,"",0);
+
+					while ((StringTool.GetNumDelimitedValues(s1$,';') < 2) && (x$ < y$))
+					{
+						x$ += 1;
+
+						s1$ = s1$ + tb$.GetLineText(x$);
+						// tb$.SetLineText(x$,"",0);
+					}
+
+
+					// add messages to dialogue panel if appropiate
+					if (StringTool.Left(s1$,10) == "[award_xp]")
+					{
+						string s2$ = StringTool.Right(s1$, StringTool.StringLength(s1$)-10);
+
+						int amount$ = StringTool.GetDelimitedInt(s2$,0,';');
+
+						StringTool.AssignF(s1$,"[INDENT][COLOR=0xFF00F800]The party has gained %d xp!\n",amount$);
+						updates$ = updates$ + s1$;
+						updates_count$ += 1;
+					} else if (StringTool.Left(s1$,12) == "[award_gold]")
+					{
+						string s2$ = StringTool.Right(s1$, StringTool.StringLength(s1$)-12);
+
+						int amount$ = StringTool.GetDelimitedInt(s2$,0,';');
+
+						if (amount$ > 0) { StringTool.AssignF(s1$,"[INDENT][COLOR=0xFF00F800]The party has gained %d gold!\n",amount$); }
+						else { StringTool.AssignF(s1$,"[INDENT][COLOR=0xFF00F800]The party has lost %d gold!\n", -amount$); }
+
+						updates$ = updates$ + s1$;
+						updates_count$ += 1;
+					} else if (StringTool.Left(s1$,11) == "[item_give]")
+					{
+						updates$ = updates$ + "[INDENT][COLOR=0xFF00F800]The party has gained an item!\n";
+						updates_count$ += 1;
+					} else if (StringTool.Left(s1$,11) == "[item_take]")
+					{
+						updates$ = updates$ + "[INDENT][COLOR=0xFF00F800]The party has lost an item!\n";
+						updates_count$ += 1;
+					} else if ( StringTool.Left(s1$,12) == "[play_sound]")
+					{
+						string s2$ = StringTool.Right(s1$, StringTool.StringLength(s1$)-12);
+						string sound$ = StringTool.GetDelimitedString(s2$,0,';');
+
+						//report.genericf("%s: play sound [%s]\n",skrit_name$, sound$);
+						Server.ScreenHero.PlayVoiceSound( sound$, 5, 10, false );
+					}
+				} else { message$ = message$ + s1$; }
+
+
+				// advance to next line
+				x$ +=1;
+			}
+
+			GameAuditor.GetDb.SetInt("dialogue_box_choices_count", choice$);
+
+			// shift (possibly resized) window to just over tooltip display
+			wnd$ = UIShell.FindUIWindow("dialogue_main_bg", owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+				wnd$.bottom = wnd$.top + 160 + ((GameAuditor.GetDb.GetInt("dialogue_box_choices_count") + updates_count$) * 16);
+
+				int dx$ = wnd$.left + (wnd$.width/2);
+				int dy$ = wnd$.bottom;
+
+//				UIShell.ShiftInterface(owner.InterfaceParent,(UIShell.ScreenWidth/2) - dx$ + 25, (UIShell.ScreenHeight - 35 - dy$));
+				UIShell.ShiftInterface(owner.InterfaceParent,UIShell.ScreenWidth + 100 - dx$, UIShell.ScreenHeight + 100 - dy$);
+			}
+
+			check_gold$();
+
+			// show message text in dialog panel, which will shift choices into the correct position.
+			if (message$ != "")
+			{
+				string s2$ = "[TOP]";
+
+				if (updates$ != "")
+				{
+					s2$ = s2$ + updates$ + "\n";
+					s2$ = s2$ + "[NOINDENT][COLOR=0xFFFFFFFF]";
+				}
+				s2$ = s2$ + message$ + "\n";
+
+				GameAuditor.GetDb.SetString("allysium_dialog_text", s2$);
+				UIShell.SendUIMessage(MSG_ONITEMPLACE, "message_handler", "data_bar");
+			}
+		}
+
+		close$
+		{
+//			report.genericf("%s: close$\n",skrit_name$);
+			if (!GameAuditor.GetDb.GetBool("dialogue_keep_open"))
+			{
+//				GameAuditor.GetDb.SetString("allysium_dialog_text", "conversation over");
+//				UIShell.SendUIMessage(MSG_ONITEMPLACE, "message_handler", "data_bar");
+
+				UIShell.SendUIMessage(MSG_ONWHEELDOWN, "message_handler", "data_bar");
+			}
+		}
+
+	]];
+
+
+	[t:button,n:button_accept]
+	{
+	  f alpha = 1.000000;
+
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x00000019;
+		group = potential_member;
+		is_top_anchor = true;
+		rect = 205,145,297,161;
+		top_anchor = 145;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onbuttonpress = notify(dialogue_accept_member) & playsound(s_e_ih_select_char_aym);
+			onvisible = alphaanimation(1.0,0.0,1.0);
+		}
+		[t:text,n:text_accept]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000001A;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+			rect = 232,146,297,161;
+			text = "Accept";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+		rollover_help = accept;
+	}
+	[t:button,n:button_decline]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x0000001A;
+		group = potential_member;
+		is_top_anchor = true;
+		rect = 308,145,400,161;
+		top_anchor = 145;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+//			onbuttonpress = notify(dialogue_decline_member) & playsound(s_e_button_decline);
+			onbuttonpress = playsound(s_e_button_decline);
+			onvisible = alphaanimation(1.0,0.0,1.0);
+		}
+		[t:text,n:text_decline]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000001B;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+			rect = 332,146,400,161;
+			text = "Decline";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+
+		rollover_help = decline;
+	}
+	[t:button,n:button_stats]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x0000001A;
+		group = potential_member;
+		is_top_anchor = true;
+		rect = 411,145,503,161;
+		top_anchor = 145;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+	  x disable_color = 0x555f5f5f;
+		[messages]
+		{
+			onbuttonpress = notify(hire_stats_show) & playsound(s_e_frontend_tiny_button_aym);
+			onvisible = alphaanimation(1.0,0.0,1.0);
+		}
+		[t:text,n:text_stats]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000001B;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+			rect = 332,146,400,161;
+			text = "View";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+
+		rollover_help = show_stats;
+	}
+
+	[t:button,n:button_buy_packmule]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x0000001B;
+		group = buy_packmule;
+		is_top_anchor = true;
+		rect = 205,145,325,161;
+		top_anchor = 145;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		disable_color = 0x55ffffff;
+		[messages]
+		{
+			onbuttonpress = notify(dialogue_buy_packmule) & playsound(s_e_ih_select_char_aym);
+		}
+		[t:text,n:text_buy_packmule]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000001C;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+			rect = 220,146,325,161;
+			text = "Buy Packmule";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+
+		rollover_help = buy_packmule;
+	}
+	[t:button,n:button_close]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x0000000E;
+		is_top_anchor = true;
+//		rect = 471,165,563,181;
+		rect = -1000,-1000,-1000,-1000;
+		top_anchor = 165;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		group = dialog_close;
+		[messages]
+		{
+			onbuttonpress = notify(exit_dialogue) & playsound(s_e_frontend_tiny_button_aym);
+		}
+		[t:text,n:text_close]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000000F;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+//			rect = 502,166,563,181;
+			rect = -1000,-1000,-1000,-1000;
+			text = "Close";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+		rollover_help = close_dialogue;
+	}
+	[t:button,n:button_shop]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x0000001B;
+		group = shop;
+		is_top_anchor = true;
+		rect = 364,165,461,181;
+		top_anchor = 165;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onbuttonpress = notify(dialogue_shop) & playsound(s_e_button_shop);
+		}
+		[t:text,n:text_shop]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000001C;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+			rect = 237,146,297,161;
+			text = "Shop";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+		rollover_help = shop;
+	}
+	[t:button,n:button_x]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = x;
+	  x draw_order = 0x00000020;
+//		rect = 581,10,597,26;
+		rect = -1000,-1000,-1000,-1000;
+		texture = b_gui_cmn_button_x_up;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onbuttonpress = notify(exit_dialogue) & playsound(s_e_frontend_tiny_button_aym);
+		}
+		rollover_help = close_dialogue;
+	}
+	[t:button,n:button_replay]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = replay;
+	  x draw_order = 0x00000016;
+		//is_top_anchor = true;
+		rect = 514,141,530,157;
+		texture = b_gui_cmn_button_replay_up;
+		top_anchor = 119;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onbuttonpress = notify(reset_dialogue) & playsound(s_e_frontend_tiny_button_aym);
+		}
+
+		rollover_help = replay;
+		group = dialog_sound;
+	}
+	[t:button,n:button_stop]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_stop;
+	  x draw_order = 0x00000014;
+		//is_top_anchor = true;
+		rect = 530,141,546,157;
+		texture = b_gui_cmn_button_stop_up;
+		top_anchor = 119;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onbuttonpress = notify(stop_dialogue) & playsound(s_e_frontend_tiny_button_aym);
+		}
+		rollover_help = stop;
+		group = dialog_sound;
+	}
+
+	[t:text_box,n:dialogue_box]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = ;
+	  x draw_order = 0x0000000E;
+	  b fixed_location = true;
+		font_type = b_gui_fnt_12p_copperplate-light;
+	  b has_slider = true;
+		is_top_anchor = true;
+		justify = left;
+	  x max_height = 0x000000F0;
+	  x max_width = 0x00000140;
+//		rect = 204,15,545,134;
+		rect = 2534,15,2800,134;
+	  f scroll_rate = 20.000000;
+		top_anchor = 15;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		show_first_line = true;
+
+		[messages]
+		{
+			onexit = notify(exit_dialogue) & playsound(s_e_frontend_tiny_button_aym);
+		}
+	}
+
+	[t:text,n:choice_0_num] { draw_order = 16; rect = 0,0,0,0; index = 0; topmost=true; justify = right; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(num_rollover$); onlbuttonup = call(button_press$); } }
+	[t:text,n:choice_1_num] { draw_order = 16; rect = 0,0,0,0; index = 1; topmost=true; justify = right; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(num_rollover$); onlbuttonup = call(button_press$); } }
+	[t:text,n:choice_2_num] { draw_order = 16; rect = 0,0,0,0; index = 2; topmost=true; justify = right; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(num_rollover$); onlbuttonup = call(button_press$); } }
+	[t:text,n:choice_3_num] { draw_order = 16; rect = 0,0,0,0; index = 3; topmost=true; justify = right; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(num_rollover$); onlbuttonup = call(button_press$); } }
+	[t:text,n:choice_4_num] { draw_order = 16; rect = 0,0,0,0; index = 4; topmost=true; justify = right; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(num_rollover$); onlbuttonup = call(button_press$); } }
+	[t:text_box,n:choice_0] { draw_order = 16; rect = 0,0,300,16; index = 0; justify = left; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(choice_rollover$); onrolloff = call(choice_rolloff$); onlbuttonup = call(button_press$); } }
+	[t:text_box,n:choice_1] { draw_order = 16; rect = 0,0,300,16; index = 1; justify = left; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(choice_rollover$); onrolloff = call(choice_rolloff$); onlbuttonup = call(button_press$); } }
+	[t:text_box,n:choice_2] { draw_order = 16; rect = 0,0,300,16; index = 2; justify = left; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(choice_rollover$); onrolloff = call(choice_rolloff$); onlbuttonup = call(button_press$); } }
+	[t:text_box,n:choice_3] { draw_order = 16; rect = 0,0,300,16; index = 3; justify = left; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(choice_rollover$); onrolloff = call(choice_rolloff$); onlbuttonup = call(button_press$); } }
+	[t:text_box,n:choice_4] { draw_order = 16; rect = 0,0,300,16; index = 4; justify = left; font_type = b_gui_fnt_12p_copperplate-light; group = choices; [messages] { onrollover = call(choice_rollover$); onrolloff = call(choice_rolloff$); onlbuttonup = call(button_press$); } }
+
+
+	[t:dialog_box,n:dialogue_main_bg]
+	{
+//	  f alpha = 1.000000;
+		alpha = 0.0;
+	  b common_control = true;
+		common_template = cpbox;
+	  x draw_order = 0x00000009;
+		is_top_anchor = true;
+		rect = 187,5,602,190;
+		top_anchor = 5;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+//		consumable = true;
+		pass_through = true;
+
+		[messages]
+		{
+			onshow = call(show$);
+			onhidden = call(close$);
+		}
+	}
+	[t:dialog_box,n:dialogue_text_bg]
+	{
+//	  f alpha = 1.000000;
+		alpha = 0.0;
+	  b common_control = true;
+		common_template = cpbox;
+	  x draw_order = 0x0000000D;
+		is_top_anchor = true;
+//		rect = 201,12,564,137;
+		rect = 531,12,799,137;
+		top_anchor = 12;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+	}
+	[t:checkbox,n:radio_button_soundoff]
+	{
+	  f alpha = 1.000000;
+	  b common_control = false;
+	  x draw_order = 0x00000017;
+	  b popup = true;
+		radio_group = dialogue_mute;
+		rect = 546,141,562,157;
+		texture = b_gui_cmn_button_soundon_up;
+		top_anchor = 119;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			oncheck = notify(mute_dialogue) & playsound(s_e_frontend_tiny_button_aym);
+
+			onlbuttondown = loadtexture(b_gui_cmn_button_soundon_down);
+			onlbuttonup	= loadtexture(b_gui_cmn_button_soundon_up);
+			onrolloff = loadtexture(b_gui_cmn_button_soundon_up);
+			onrollover = loadtexture(b_gui_cmn_button_soundon_hov);
+
+			onlbuttondownchecked = loadtexture(b_gui_cmn_button_soundoff_down);
+			onlbuttonupchecked	= loadtexture(b_gui_cmn_button_soundoff_up);
+			onrolloffchecked	= loadtexture(b_gui_cmn_button_soundoff_up);
+			onrolloverchecked	= loadtexture(b_gui_cmn_button_soundoff_hov);
+
+			onuncheck = notify(unmute_dialogue) & playsound(s_e_frontend_tiny_button_aym);
+		}
+
+		rollover_help = sound_toggle;
+		group = dialog_sound;
+	}
+	[t:text,n:text_available_gold]
+	{
+	  f alpha = 1.000000;
+	  b common_control = false;
+		common_template = ;
+	  x draw_order = 0x0000001F;
+	  x font_color = 0xFFFFFFFF;
+	  x font_size = 0x00000000;
+		font_type = b_gui_fnt_12p_copperplate-light;
+		justify = left;
+		rect = 206,167,355,180;
+		text = "Available Gold: ";
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		group = party_gold;
+	}
+	[t:text,n:text_pack_cost]
+	{
+	  f alpha = 1.000000;
+	  b common_control = false;
+		common_template = ;
+	  x draw_order = 0x0000001B;
+	  x font_color = 0xFFFFFFFF;
+	  x font_size = 0x00000000;
+		font_type = b_gui_fnt_12p_copperplate-light;
+		group = buy_packmule;
+		justify = center;
+		rect = 400,167,400,180;
+		text = "Cost: 0";
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+	}
+
+	[t:button,n:button_more]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x00000019;
+		group = more;
+		is_top_anchor = true;
+//		rect = 205,145,297,161;
+		rect = -1000,-1000,-1000,-1000'
+		top_anchor = 145;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onbuttonpress = notify(dialogue_more) & playsound(s_e_gui_dialogue_more);
+			onvisible = alphaanimation(1.0,0.0,1.0);
+		}
+		[t:text,n:text_more]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000001A;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+			rect = 232,146,297,161;
+			text = "More...";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+		rollover_help = more_dialogue;
+	}
+
+
+	// Generic Buttons
+	[t:button,n:button_1]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x00000019;
+		group = generic_button_1;
+		is_top_anchor = true;
+		rect = 205,145,297,161;
+		top_anchor = 145;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onbuttonpress = notify(dialogue_button_1) & playsound(s_e_frontend_tiny_button_aym);
+			onvisible = alphaanimation(1.0,0.0,1.0);
+		}
+		[t:text,n:text_1]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000001A;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+			rect = 232,146,297,161;
+			text = "1";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+	}
+	[t:button,n:button_2]
+	{
+	  f alpha = 1.000000;
+	  b common_control = true;
+		common_template = button_4;
+	  x draw_order = 0x0000001A;
+		group = generic_button_2;
+		is_top_anchor = true;
+		rect = 308,145,400,161;
+		top_anchor = 145;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onbuttonpress = notify(dialogue_button_2) & playsound(s_e_frontend_tiny_button_aym);
+			onvisible = alphaanimation(1.0,0.0,1.0);
+		}
+		[t:text,n:text_2]
+		{
+		  f alpha = 1.000000;
+		  b common_control = false;
+			common_template = ;
+		  x draw_order = 0x0000001B;
+		  x font_color = 0xFFFFFFFF;
+		  x font_size = 0x00000000;
+			font_type = b_gui_fnt_12p_copperplate-light;
+			justify = center;
+			rect = 332,146,400,161;
+			text = "2";
+			uvcoords = 0.000000,0.000000,1.000000,1.000000;
+			wrap_mode = clamp;
+		}
+	}
+}

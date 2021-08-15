@@ -1,0 +1,615 @@
+/////////////////////////////////////////////////////////////////////////////
+//
+// File        :  ai_panel.gas
+// Author(s)   :  Major Hostility
+// Description :
+//
+//
+//----------------------------------------------------------------------------
+// $Version: 0.01												$Date: 2003.12.08
+//----------------------------------------------------------------------------
+//
+// Version History:
+//
+//
+//   0.01	2003.12.08 (mh)										first pass
+//
+//
+///////////////////////////////////////////////////////////////////////////////
+
+
+
+
+[ai_panel]
+{
+  b interface = true;
+	intended_resolution_width = 640;
+	intended_resolution_height = 480;
+
+
+	skrit =
+	[[
+		owner = UIWindow;
+//		string skrit_name$ = "ai.gas";
+
+
+		string var_string$;
+		#include "k_inc_sfx_utils"
+
+
+		draw_jewel_up$()		{ get_radio_midstate$(owner.name, owner.InterfaceParent) ? owner.SetUVRect(0.500, 0.527, 0.960, 1.000) : owner.SetUVRect(0.500, 0.527, 0.789, 0.828); }
+		draw_jewel_hover$()		{ }
+		draw_jewel_down$()		{ get_radio_midstate$(owner.name, owner.InterfaceParent) ? owner.SetUVRect(0.500, 0.527, 0.960, 1.000) : owner.SetUVRect(0.500, 0.527, 0.871, 0.914); }
+		draw_jewel_on$()		{ owner.SetUVRect(0.500, 0.527, 0.914, 0.957); }
+
+		draw_button_up$()		{ owner.SetUVRect(0.000, 0.305, 0.676, 0.719); }
+		draw_button_hover$()	{ owner.SetUVRect(0.000, 0.305, 0.723, 0.766); }
+		draw_button_down$()		{ owner.SetUVRect(0.000, 0.305, 0.770, 0.813); }
+
+
+		check_buttons$()
+		{
+			bool	move_a$, move_b$, move_c$;
+			bool	attack_a$, attack_b$, attack_c$;
+			bool	target_a$, target_b$, target_c$;
+
+			int move_count$ = 0;
+			int attack_count$ = 0;
+			int target_count$ = 0;
+
+
+			int i$ = 0;
+			int j$ = Server.ScreenParty.Children.Size();
+			while ( i$ != j$ )
+			{
+				Go player$ = Server.ScreenParty.Children.Get(i$);
+				i$ += 1;
+
+				if (player$.IsSelected())
+				{
+//					report.genericf("%s: %d %d %d\n",player$.templateName,player$.mind.movementorders,player$.mind.combatorders,player$.mind.focusorders);
+
+					if (player$.mind.MovementOrders == mo_free)			{ move_a$ = true; }
+					else if (player$.mind.MovementOrders == mo_limited)	{ move_b$ = true; }
+					else if (player$.mind.MovementOrders == mo_hold)	{ move_c$ = true; }
+
+					if (player$.mind.CombatOrders == co_free)			{ attack_a$ = true; }
+					else if (player$.mind.CombatOrders == co_limited)	{ attack_b$ = true; }
+					else if (player$.mind.CombatOrders == co_hold)		{ attack_c$ = true; }
+
+					if (player$.mind.FocusOrders == fo_closest)			{ target_a$ = true; }
+					else if (player$.mind.FocusOrders == fo_strongest)	{ target_b$ = true; }
+					else if (player$.mind.FocusOrders == fo_weakest)	{ target_c$ = true; }
+				}
+			}
+
+			if (move_a$) { move_count$ += 1; }
+			if (move_b$) { move_count$ += 1; }
+			if (move_c$) { move_count$ += 1; }
+			if (attack_a$) { attack_count$ += 1; }
+			if (attack_b$) { attack_count$ += 1; }
+			if (attack_c$) { attack_count$ += 1; }
+			if (target_a$) { target_count$ += 1; }
+			if (target_b$) { target_count$ += 1; }
+			if (target_c$) { target_count$ += 1; }
+
+/*
+			report.genericf("  [ %d %d %d ] = %d\n",move_a$,move_b$,move_c$,move_count$);
+			report.genericf("  [ %d %d %d ] = %d\n",attack_a$,attack_b$,attack_c$,attack_count$);
+			report.genericf("  [ %d %d %d ] = %d\n",target_a$,target_b$,target_c$,target_count$);
+*/
+			if (move_count$ > 1)
+			{
+				set_radio_value$("ai_move_free",   owner.InterfaceParent, false);
+				set_radio_value$("ai_move_engage", owner.InterfaceParent, false);
+				set_radio_value$("ai_move_hold",   owner.InterfaceParent, false);
+
+				set_radio_midstate$("ai_move_free",   owner.InterfaceParent, move_a$);
+				set_radio_midstate$("ai_move_engage", owner.InterfaceParent, move_b$);
+				set_radio_midstate$("ai_move_hold",   owner.InterfaceParent, move_c$);
+
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_move_free",   owner.InterfaceParent);
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_move_engage", owner.InterfaceParent);
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_move_hold",   owner.InterfaceParent);
+			} else
+			{
+				if (move_a$)	  { set_radio_value$("ai_move_free",   owner.InterfaceParent, true); }
+				else if (move_b$) { set_radio_value$("ai_move_engage", owner.InterfaceParent, true); }
+				else if (move_c$) { set_radio_value$("ai_move_hold",   owner.InterfaceParent, true); }
+			}
+
+			if (attack_count$ > 1)
+			{
+				set_radio_value$("ai_attack_free",   owner.InterfaceParent, false);
+				set_radio_value$("ai_attack_defend", owner.InterfaceParent, false);
+				set_radio_value$("ai_attack_hold",   owner.InterfaceParent, false);
+
+				set_radio_midstate$("ai_attack_free",   owner.InterfaceParent, attack_a$);
+				set_radio_midstate$("ai_attack_defend", owner.InterfaceParent, attack_b$);
+				set_radio_midstate$("ai_attack_hold",   owner.InterfaceParent, attack_c$);
+
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_attack_free",   owner.InterfaceParent);
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_attack_defend", owner.InterfaceParent);
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_attack_hold",   owner.InterfaceParent);
+			} else
+			{
+				if (attack_a$)		{ set_radio_value$("ai_attack_free",   owner.InterfaceParent, true); }
+				else if (attack_b$) { set_radio_value$("ai_attack_defend", owner.InterfaceParent, true); }
+				else if (attack_c$) { set_radio_value$("ai_attack_hold",   owner.InterfaceParent, true); }
+			}
+
+			if (target_count$ > 1)
+			{
+				set_radio_value$("ai_target_closest",   owner.InterfaceParent, false);
+				set_radio_value$("ai_target_strongest", owner.InterfaceParent, false);
+				set_radio_value$("ai_target_weakest",   owner.InterfaceParent, false);
+
+				set_radio_midstate$("ai_target_closest",   owner.InterfaceParent, target_a$);
+				set_radio_midstate$("ai_target_strongest", owner.InterfaceParent, target_b$);
+				set_radio_midstate$("ai_target_weakest",   owner.InterfaceParent, target_c$);
+
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_target_closest",   owner.InterfaceParent);
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_target_strongest", owner.InterfaceParent);
+				UIShell.SendUIMessage(MSG_ONROLLOFF, "ai_target_weakest",   owner.InterfaceParent);
+			} else
+			{
+				if (target_a$)		{ set_radio_value$("ai_target_closest",   owner.InterfaceParent, true); }
+				else if (target_b$) { set_radio_value$("ai_target_strongest", owner.InterfaceParent, true); }
+				else if (target_c$) { set_radio_value$("ai_target_weakest",   owner.InterfaceParent, true); }
+			}
+		}
+
+		set_button$(string name$, string label$, string key$, int index$)
+		{
+			set_text$("text_" + name$, owner.InterfaceParent, label$);
+
+			UIWindow wnd$ = UIShell.FindUIWindow("button_" + name$, owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+				wnd$.index = index$;
+				wnd$.RolloverKey = key$;
+
+				// trigger rollover refresh
+				wnd$.visible = false;
+				wnd$.visible = true;
+			}
+		}
+
+		change_orders$()
+		{
+		//	report.genericf("change_orders$() %d\n",owner.index);
+
+			string move$ = "movement";
+			string attack$ = "attack";
+			string target$ = "target";
+
+
+			// update big buttons
+			if (owner.index == 0)		{ set_button$(move$, "Move Freely",	"movement_free", owner.index); }
+			else if (owner.index == 1)	{ set_button$(move$, "Engage",		"movement_engage", owner.index); }
+			else if (owner.index == 2)	{ set_button$(move$, "Hold Ground",	"movement_holdground", owner.index); }
+
+			else if (owner.index == 3)	{ set_button$(attack$, "Attack",	"attack_free", owner.index); }
+			else if (owner.index == 4)	{ set_button$(attack$, "Defend",	"attack_fightback", owner.index); }
+			else if (owner.index == 5)	{ set_button$(attack$, "Hold Fire",	"attack_holdfire", owner.index); }
+
+			else if (owner.index == 6)	{ set_button$(target$, "Closest",	"target_closest", owner.index); }
+			else if (owner.index == 7)	{ set_button$(target$, "Strongest",	"target_strongest", owner.index); }
+			else if (owner.index == 8)	{ set_button$(target$, "Weakest",	"target_weakest", owner.index); }
+
+
+			if (!UIShell.IsInterfaceVisible(owner.InterfaceParent)) { return; }
+
+
+			// update players as needed
+			int i$ = 0;
+			int j$ = Server.ScreenParty.Children.Size();
+			while ( i$ != j$ )
+			{
+				Go player$ = Server.ScreenParty.Children.Get(i$);
+				i$ += 1;
+
+				if (player$.IsSelected())
+				{
+						 if (owner.index == 0 && player$.mind.MovementOrders != mo_free)	{ player$.mind.RSSetMovementOrders(mo_free); }
+					else if (owner.index == 1 && player$.mind.MovementOrders != mo_limited)	{ player$.mind.RSSetMovementOrders(mo_limited); }
+					else if (owner.index == 2 && player$.mind.MovementOrders != mo_hold)	{ player$.mind.RSSetMovementOrders(mo_hold); }
+
+					else if (owner.index == 3 && player$.mind.CombatOrders != co_free)		{ player$.mind.RSSetCombatOrders(co_free); }
+					else if (owner.index == 4 && player$.mind.CombatOrders != co_limited)	{ player$.mind.RSSetCombatOrders(co_limited); }
+					else if (owner.index == 5 && player$.mind.CombatOrders != co_hold)		{ player$.mind.RSSetCombatOrders(co_hold); }
+
+					else if (owner.index == 6 && player$.mind.FocusOrders != fo_closest)	{ player$.mind.RSSetFocusOrders(fo_closest); }
+					else if (owner.index == 7 && player$.mind.FocusOrders != fo_strongest)	{ player$.mind.RSSetFocusOrders(fo_strongest); }
+					else if (owner.index == 8 && player$.mind.FocusOrders != fo_weakest)	{ player$.mind.RSSetFocusOrders(fo_weakest); }
+				}
+			}
+		}
+
+		cycle_orders$()
+		{
+			owner.index = (3 * (owner.index / 3)) + ((owner.index+1) % 3);
+
+			if (owner.index == 0)		{ set_radio_value$("ai_move_free", owner.InterfaceParent, true); }
+			else if (owner.index == 1)	{ set_radio_value$("ai_move_engage", owner.InterfaceParent, true); }
+			else if (owner.index == 2)	{ set_radio_value$("ai_move_hold", owner.InterfaceParent, true); }
+
+			else if (owner.index == 3)	{ set_radio_value$("ai_attack_free", owner.InterfaceParent, true); }
+			else if (owner.index == 4)	{ set_radio_value$("ai_attack_defend", owner.InterfaceParent, true); }
+			else if (owner.index == 5)	{ set_radio_value$("ai_attack_hold", owner.InterfaceParent, true); }
+
+			else if (owner.index == 6)	{ set_radio_value$("ai_target_closest", owner.InterfaceParent, true); }
+			else if (owner.index == 7)	{ set_radio_value$("ai_target_strongest", owner.InterfaceParent, true); }
+			else if (owner.index == 8)	{ set_radio_value$("ai_target_weakest", owner.InterfaceParent, true); }
+			
+//			change_orders$();
+//			check_buttons$();
+		}
+
+
+		show$
+		{
+			int left$ = UIShell.ScreenWidth - owner.width - 4;
+			int top$ = UIShell.ScreenHeight - 138 - owner.height;
+
+			if (UIShell.IsInterfaceVisible("formation_panel")) { left$ -= 43; }
+
+			if (owner.left != left$ || owner.top != top$) { UIShell.ShiftInterface(owner.InterfaceParent, left$ - owner.left, top$ - owner.top); }
+
+			check_buttons$();
+			UIShell.ShowInterface(owner.InterfaceParent);			
+		}
+		refresh$
+		{
+			if (UIShell.IsInterfaceVisible(owner.InterfaceParent)) { show$(); }
+		}
+		hide$
+		{
+			UIShell.HideInterface(owner.InterfaceParent);			
+		}
+
+		init$
+		{
+		}
+	]];
+
+
+	[t:dialog_box,n:message_handler]
+	{
+		draw_order = 10;
+		rect = 0,0,128,48;
+		texture = b_gui_ally_panels;
+		uvcoords = 0.000, 0.813, 0.500, 1.000;
+
+		[messages]
+		{
+			oncreated = call(init$);
+
+			oncheck = call(refresh$);
+			onuncheck = call(hide$) & playsound(s_e_frontend_tiny_button_aym);
+			onforcecheck = call(show$) & playsound(s_e_frontend_tiny_button_aym);
+		}
+	}
+
+	// movement buttons
+	[t:radio_button,n:ai_move_free]
+	{
+		draw_order = 11;
+		rect = 13,6,21,17;
+		is_common_control = false;
+		radio_group = ai_radio_movement;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 0;
+		rollover_help = button_movement_freely;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+	[t:radio_button,n:ai_move_engage]
+	{
+		draw_order = 11;
+		rect = 23,6,31,17;
+		is_common_control = false;
+		radio_group = ai_radio_movement;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 1;
+		rollover_help = button_movement_engage;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+	[t:radio_button,n:ai_move_hold]
+	{
+		draw_order = 11;
+		rect = 33,6,41,17;
+		is_common_control = false;
+		radio_group = ai_radio_movement;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 2;
+		rollover_help = button_movement_holdground;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+
+	// attack buttons
+	[t:radio_button,n:ai_attack_free]
+	{
+		draw_order = 11;
+		rect = 13,19,21,30;
+		is_common_control = false;
+		radio_group = ai_radio_attack;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 3;
+		rollover_help = button_attack_free;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+	[t:radio_button,n:ai_attack_defend]
+	{
+		draw_order = 11;
+		rect = 23,19,31,30;
+		is_common_control = false;
+		radio_group = ai_radio_attack;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 4;
+		rollover_help = button_attack_fightback;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+	[t:radio_button,n:ai_attack_hold]
+	{
+		draw_order = 11;
+		rect = 33,19,41,30;
+		is_common_control = false;
+		radio_group = ai_radio_attack;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 5;
+		rollover_help = button_attack_holdfire;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+
+	// targeting buttons
+	[t:radio_button,n:ai_target_closest]
+	{
+		draw_order = 11;
+		rect = 13,32,21,43;
+		is_common_control = false;
+		radio_group = ai_radio_target;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 6;
+		rollover_help = button_target_closest;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+	[t:radio_button,n:ai_target_strongest]
+	{
+		draw_order = 11;
+		rect = 23,32,31,43;
+		is_common_control = false;
+		radio_group = ai_radio_target;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 7;
+		rollover_help = button_target_strongest;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+	[t:radio_button,n:ai_target_weakest]
+	{
+		draw_order = 11;
+		rect = 33,32,41,43;
+		is_common_control = false;
+		radio_group = ai_radio_target;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		index = 8;
+		rollover_help = button_target_weakest;
+
+		[messages]
+		{
+			oncheck			= call(draw_jewel_on$) & call(change_orders$);
+			onuncheck		= call(draw_jewel_up$);
+			oncreated		= call(draw_jewel_up$);
+			onrolloff		= call(draw_jewel_up$);
+			onrollover		= call(draw_jewel_hover$);
+			onlbuttondown	= call(draw_jewel_down$);
+		}
+	}
+
+	[t:button,n:button_movement]
+	{
+		draw_order = 11;
+		rect = 44,5,122,17;
+		is_common_control = false;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		[messages]
+		{
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+			onbuttonpress	= call(cycle_orders$);
+		}
+	}
+	[t:text,n:text_movement]
+	{
+	    draw_order = 12;
+	  x font_color = -1;
+	  x font_size = 0;
+		font_type = b_gui_fnt_12p_copperplate-light;
+		justify = center;
+		rect = 44,5,122,17;
+		text = "movement";
+	}
+
+	[t:button,n:button_attack]
+	{
+		draw_order = 11;
+		rect = 44,18,122,30;
+		is_common_control = false;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		[messages]
+		{
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+			onbuttonpress	= call(cycle_orders$);
+		}
+	}
+	[t:text,n:text_attack]
+	{
+	    draw_order = 12;
+	  x font_color = -1;
+	  x font_size = 0;
+		font_type = b_gui_fnt_12p_copperplate-light;
+		justify = center;
+		rect = 44,18,122,30;
+		text = "attack";
+	}
+
+	[t:button,n:button_target]
+	{
+		draw_order = 11;
+		rect = 44,31,122,43;
+		is_common_control = false;
+
+		texture = b_gui_ally_panels;
+		wrap_mode = clamp;
+
+		[messages]
+		{
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+			onbuttonpress	= call(cycle_orders$);
+		}
+	}
+	[t:text,n:text_target]
+	{
+	    draw_order = 12;
+	  x font_color = -1;
+	  x font_size = 0;
+		font_type = b_gui_fnt_12p_copperplate-light;
+		justify = center;
+		rect = 44,31,122,43;
+		text = "target";
+	}
+
+	[t:window,n:button_x]
+	{
+		alpha = 0.00;
+		draw_order = 12;
+		rect = 0,17,10,29;
+		rollover_help = close_ai;
+
+		texture = b_gui_ally_panels;
+		uvcoords = 0.754, 0.953, 0.793, 1.000;
+
+		[messages]
+		{
+			onlbuttonup = call(hide$) & playsound(s_e_frontend_tiny_button_aym);
+
+			onrollover = setalpha(1.0);
+			onrolloff = setalpha(0.0);
+		}
+	}
+}

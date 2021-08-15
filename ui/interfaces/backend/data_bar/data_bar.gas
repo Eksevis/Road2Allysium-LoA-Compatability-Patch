@@ -1,0 +1,1450 @@
+/////////////////////////////////////////////////////////////////////////////
+//
+// File        :  data_bar.gas
+// Author(s)   :  GPG, Major Hostility
+// Description :
+//
+//
+//----------------------------------------------------------------------------
+// $Version: 0.07												$Date: 2004.04.08
+//----------------------------------------------------------------------------
+//
+// Version History:
+//
+//
+//   0.07	2004.04.08 (mh)		check_dialog_refresh$()			timer driven dialog helper function
+//
+//   0.06	2003.12.12 (mh)										implemented dialog choice scrolling
+//
+//   0.05	2003.12.11 (mh)										implemented dialog panel with scrollback
+//
+//   0.04	2003.12.08 (mh)		toggle_ai_panel$()				too many interface activations during init$() caused exception error ???
+//								toggle_formation_pannel$()		  so we need to activate the ai/formation panels before we show them
+//																hooked up "follow" button
+//
+//   0.03	2003.12.07 (mh)										potions now reflect "focused" character
+//																conversation panel no longer 'anchored'
+//
+//   0.02	2003.12.06 (mh)										added conversation frame support
+//
+//   0.01	2003.12.04 (mh)										first pass at new Allysium interface
+//
+//
+///////////////////////////////////////////////////////////////////////////////
+
+
+
+
+[data_bar]
+{
+  b interface = true;
+	intended_resolution_width = 640;
+	intended_resolution_height = 480;
+
+
+	skrit =
+	[[
+		owner = UIWindow;
+		string skrit_name$ = "data_bar.gas";
+
+	
+		string var_string$;
+		#include "k_inc_sfx_utils"
+
+
+		toggle_ai_panel$()
+		{
+			eUIMessage msg$ = UIShell.IsInterfaceVisible("ai_panel") ? MSG_ONUNCHECK : MSG_ONFORCECHECK;			
+			UIShell.SendUIMessage(msg$, "message_handler", "ai_panel");
+		}
+		toggle_formation_panel$()
+		{
+			eUIMessage msg$ = UIShell.IsInterfaceVisible("formation_panel") ? MSG_ONUNCHECK : MSG_ONFORCECHECK;
+			UIShell.SendUIMessage(msg$, "message_handler", "formation_panel");
+		}
+
+		toggle_follow$()
+		{
+			if (GameAuditor.GetDb.GetBool("skip_follow_toggle"))
+			{
+				GameAuditor.GetDb.SetBool("skip_follow_toggle", false);
+				return;
+			}
+
+//			report.genericf("%s: toggle_follow$()\n",skrit_name$);
+			set_checkbox_value$("button_follow", "field_commands", !get_checkbox_value$("button_follow", "field_commands"));
+		}
+		check_follow_mode$()
+		{
+			if (UIPartyManager.FollowMode != !get_checkbox_value$("mainbar_button_5", owner.InterfaceParent))
+			{
+//				report.genericf("%s: follow mode %d\n",skrit_name$,UIPartyManager.FollowMode);
+
+				GameAuditor.GetDb.SetBool("skip_follow_toggle", true);
+				set_checkbox_value$("mainbar_button_5", owner.InterfaceParent, !UIPartyManager.FollowMode);
+			}
+		}
+
+		check_dialog_refresh$()
+		{
+			if (GameAuditor.GetDb.GetBool("dialog_refresh"))
+			{
+				GameAuditor.GetDb.SetBool("dialog_refresh",false);
+
+				UIDialogueHandler.RSSetButtonValue(GameAuditor.GetDb.GetString("dialog_conv"));
+				UIShell.SendUIMessage(MSG_ONBUTTONPRESS, "button_more", "dialogue_box");
+			}
+		}
+		check_dialog_position$()
+		{
+			int		dialog_width$ = 360;
+			int		height$ = GameAuditor.GetDb.GetBool("dialog_open") ? 136 : 15;
+			int		top$ = UIShell.ScreenHeight - (55+48) - height$;
+			int		left$ = (UIShell.ScreenWidth/2) - (dialog_width$/2);
+
+
+			UIWindow wnd$ = UIShell.FindUIWIndow("dialog_border_topleft", owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+				if (wnd$.top != top$ || wnd$.left != left$)
+				{
+//					report.genericf("%s: shifting dialog %d,%d\n",skrit_name$,left$-wnd$.left,top$-wnd$.top);
+					UIShell.ShiftGroup(owner.InterfaceParent, "dialog_box", left$ - wnd$.left, top$ - wnd$.top);
+				}
+
+				// adjust text panel height since draw_order doesn't seem to be working
+				wnd$ = UIShell.FindUIWindow("dialog_text", owner.InterfaceParent);
+				if (wnd$ != null)
+				{
+					int bot$ = UIShell.ScreenHeight - 55 - 12;
+					if (wnd$.bottom != bot$)
+					{
+						UITextBox tb$ = QueryDerivedTextBox(wnd$);
+						if (tb$ != null)
+						{
+							int old_visible_lines$ = wnd$.height / tb$.ElementHeight;
+
+							wnd$.bottom = bot$;
+
+							int new_visible_lines$ = wnd$.height / tb$.ElementHeight;
+
+							int new_line$ = tb$.LeadElement + (old_visible_lines$ - new_visible_lines$);
+							if (new_line$ + new_visible_lines$ > tb$.LineCount) { new_line$ = tb$.LineCount - new_visible_lines$; }
+							tb$.LeadElement = new_line$;
+						}
+					}
+				}
+			}
+
+			UIWindow cover$ = UIShell.FindUIWIndow("dialog_text_cover", owner.InterfaceParent);
+			if (cover$ != null) { cover$.visible = UIShell.IsInterfaceVisible("dialogue_box"); }
+//			if (cover$ != null) { cover$.visible = false; }
+
+		}
+		dialog_open$()
+		{
+			if (!GameAuditor.GetDb.GetBool("dialog_open"))
+			{
+				GameAuditor.GetDb.SetBool("dialog_open", true);
+
+				set_checkbox_value$("button_dialog", owner.InterfaceParent, true);
+				check_dialog_position$();
+			}
+		}
+		dialog_close$()
+		{
+			if (GameAuditor.GetDb.GetBool("dialog_open"))
+			{
+				GameAuditor.GetDb.SetBool("dialog_open", false);
+
+				set_checkbox_value$("button_dialog", owner.InterfaceParent, false);
+				check_dialog_position$();
+			}
+		}
+		check_choice_visibility$()
+		{
+			UIWindow wnd$ = UIShell.FindUIWindow("dialog_text", owner.InterfaceParent);
+			if (wnd$ == null) { return; }
+
+			int x$ = 0;
+			int y$ = GameAuditor.GetDb.GetInt("dialogue_box_choices_count");
+			string s1$;
+			int choice_top$ = UIShell.ScreenHeight;
+
+			while (x$ < y$)
+			{
+				StringTool.AssignF(s1$,"choice_%d",x$);
+				UIWindow choice_box$ = UIShell.FindUIWindow(s1$, "dialogue_box");
+				if (choice_box$ != null)
+				{
+//					report.genericf("%s: text box %d - %d, choice %d - %d\n",skrit_name$,wnd$.top,wnd$.bottom,choice_box$.top,choice_box$.bottom);
+					choice_box$.visible = (choice_box$.top >= wnd$.top) && (choice_box$.bottom <= wnd$.bottom);
+
+					UIWindow choice_label$ = UIShell.FindUIWindow(s1$+"_num", "dialogue_box");
+					if (choice_label$ != null) { choice_label$.visible = choice_box$.visible; }
+
+					if (choice_box$.top < choice_top$) { choice_top$ = choice_box$.top; }
+				}
+
+				x$ += 1;
+			}
+
+			// report.genericf("  choice top: %d\n",choice_top$);
+			
+			UIWindow cover$ = UIShell.FindUIWindow("dialog_text_cover", owner.InterfaceParent);
+			if (cover$ != null)
+			{
+				cover$.top = choice_top$;
+				cover$.bottom = wnd$.bottom;
+			}
+
+
+			wnd$ = UIShell.FindUIWindow("text_available_gold", "dialogue_box");
+			if (wnd$ == null) { return; }
+			if (!wnd$.visible) { return; }
+
+			UIWindow scroll$ = UIShell.FindUIWindow("dialog_text", owner.InterfaceParent);
+			if (scroll$ == null) { return; }
+			UITextBox tb$ = QueryDerivedTextBox(scroll$);
+			if (tb$ == null) { return; }
+
+			int visible_lines$ = scroll$.height / tb$.ElementHeight;
+			bool hidden$ = tb$.LeadElement + visible_lines$ < tb$.LineCount + GameAuditor.GetDb.GetInt("dialog_text_extra_lines");
+			if (hidden$)
+			{
+				if (wnd$.left < UIShell.ScreenWidth) { UIShell.ShiftGroup("dialogue_group", "party_gold", UIShell.ScreenWidth, 0); }
+			} else
+			{
+				if (wnd$.left > UIShell.ScreenWidth) { UIShell.ShiftGroup("dialogue_group", "party_gold", -UIShell.ScreenWidth, 0); }
+			}
+
+			wnd$ = UIShell.FindUIWindow("text_pack_cost", "dialogue_box");
+			if (wnd$ == null) { return; }
+			if (!wnd$.visible) { return; }
+			if (hidden$)
+			{
+				if (wnd$.left < UIShell.ScreenWidth) { UIShell.ShiftGroup("dialogue_group", "buy_packmule", UIShell.ScreenWidth, 0); }
+			} else
+			{
+				if (wnd$.left > UIShell.ScreenWidth) { UIShell.ShiftGroup("dialogue_group", "buy_packmule", -UIShell.ScreenWidth, 0); }
+			}
+
+		}
+		dialog_scroll$()
+		{
+			UIWindow wnd$ = UIShell.FindUIWindow("dialog_text", owner.InterfaceParent);
+			if (wnd$ == null) { return; }
+
+			UITextBox tb$ = QueryDerivedTextBox(wnd$);
+			if (tb$ == null) { return; }
+
+			int last_line$ = tb$.LineCount + GameAuditor.GetDb.GetInt("dialog_text_extra_lines");
+			int visible_lines$ = wnd$.height / tb$.ElementHeight;
+			int choices$ = UIShell.IsInterfaceVisible("dialogue_box");
+			
+			if (!owner.index && tb$.LeadElement > 0)
+			{
+//				report.genericf("%s: scroll up\n",skrit_name$);
+				tb$.LeadElement = tb$.LeadElement-1;
+				if (choices$) { UIShell.ShiftGroup("dialogue_box", "choices", 0, tb$.ElementHeight); }
+			} else if (owner.index && (tb$.LeadElement + visible_lines$ < last_line$))
+			{
+//				report.genericf("%s: scroll down\n",skrit_name$);
+				tb$.LeadElement = tb$.LeadElement+1;
+				if (choices$) { UIShell.ShiftGroup("dialogue_box", "choices", 0, -tb$.ElementHeight); }
+			}
+
+			if (choices$) { check_choice_visibility$(); }
+		}
+		dialog_add_text$(string text$)
+		{
+			UIWindow wnd$ = UIShell.FindUIWindow("dialog_text", owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+				UITextBox tb$ = QueryDerivedTextBox(wnd$);
+				if (tb$ != null)
+				{
+					int		top$ = -1;
+					int		color$ = -1;
+					bool	indent$ = false;
+
+//					report.genericf("%s: processing %s\n",skrit_name$,text$);
+
+					// [TOP] macro only appears at the beginning of a text block
+					if (StringTool.Left(text$,5) == "[TOP]")
+					{
+						text$ = StringTool.Right(text$,StringTool.StringLength(text$)-5);
+						top$ = tb$.LineCount;
+					}
+
+					int lines$ = StringTool.GetNumDelimitedValues(text$,'\n');
+					int y$ = 0;
+
+					while (y$ < lines$)
+					{
+						string line$ = StringTool.GetDelimitedString2(text$,y$,'\n');
+
+						bool done$ = false;
+						while (!done$ && StringTool.Left(line$,1) == "[")
+						{
+							if (StringTool.Left(line$,8) == "[INDENT]")
+							{
+								line$ = StringTool.Right(line$,StringTool.StringLength(line$)-8);
+								indent$ = true;
+							} else if (StringTool.Left(line$,10) == "[NOINDENT]")
+							{
+								line$ = StringTool.Right(line$,StringTool.StringLength(line$)-10);
+								indent$ = false;
+							} else if (StringTool.Left(line$,7) == "[COLOR=")
+							{
+								string s2$ = StringTool.Right(StringTool.Left(line$,17),10);
+								color$ = StringTool.GetDelimitedInt(s2$,0);
+								line$ = StringTool.Right(line$,StringTool.StringLength(line$)-18);
+							} else
+							{
+								done$ = true;
+							}
+						}
+
+						string s1$ = indent$ ? "    " : "";
+						s1$ = s1$ + line$;
+
+						// break down string into multiple lines if necessary
+						while (StringTool.StringWidth(s1$,15) > (wnd$.width-10))
+						{
+							int w$ = 1;
+							int len$ = StringTool.StringLength(s1$);
+							string s2$;
+
+							// add characters until string is too wide
+							done$ = false;
+							while (!done$ && (w$ < len$))
+							{
+								s2$ = StringTool.Left(s1$,w$+1);
+								if (StringTool.StringWidth(s2$,15) < tb$.width) { w$ += 1; }
+								else { done$ = true; }
+							}
+
+							// now back up to last space or period
+							done$ = false;
+							int w2$ = w$;
+							while (!done$ && (w2$ > 0))
+							{
+								s2$ = StringTool.Left(s1$,w2$);
+								if ((StringTool.Right(s2$,1) == " ") || (StringTool.Right(s2$,1) == ".")) { done$ = true; }
+								else { w2$ -= 1; }
+							}
+							if (w2$ != 0) { w$ = w2$; }
+							tb$.SetLineText(tb$.LineCount,s2$,color$);
+
+							s1$ = StringTool.Right(s1$,StringTool.StringLength(s1$)-w$);
+							if (indent$ && s1$ != "") { s1$ = "    " + s1$; }
+						}
+
+						tb$.SetLineText(tb$.LineCount,s1$,color$);
+						y$ += 1;
+					}
+
+					int visible_lines$ = wnd$.height / tb$.ElementHeight;
+					if (top$ == -1)
+					{
+						// make sure new text is visible
+						if (tb$.LeadElement + visible_lines$ < tb$.LineCount)
+						{
+							tb$.LeadElement = tb$.LineCount - visible_lines$;
+						}
+
+						GameAuditor.GetDb.SetInt("dialog_text_extra_lines",0);
+					} else
+					{
+						// scroll to the [TOP] of text block
+						tb$.LeadElement = top$;
+
+						GameAuditor.GetDb.SetInt("dialog_text_extra_lines",(top$+visible_lines$) - tb$.LineCount);
+
+						UIWindow choices$ = UIShell.FindUIWindow("choice_0","dialogue_box");
+						if (choices$ != null)
+						{
+							int new_top$ = wnd$.top + ((tb$.LineCount-tb$.LeadElement)*tb$.ElementHeight);
+							UIShell.ShiftGroup("dialogue_box","choices",wnd$.left+20-choices$.left,new_top$-choices$.top);
+
+							check_choice_visibility$();
+						}
+					}
+				}
+			}
+		}
+		dialog_new_text$()
+		{
+			string s1$ = GameAuditor.GetDb.GetString("allysium_dialog_text");
+			if (s1$ != "")
+			{
+				dialog_add_text$(s1$);
+
+				GameAuditor.GetDb.SetString("allysium_dialog_text", "");
+			}
+		}
+
+
+		draw_button_up$()		{ float left$ = 22.0*owner.index/256; float right$ = 22.0*(owner.index+1)/256; owner.SetUVRect(left$,right$,0.000,0.086); }
+		draw_button_hover$()	{ float left$ = 22.0*owner.index/256; float right$ = 22.0*(owner.index+1)/256; owner.SetUVRect(left$,right$,0.086,0.172); }
+		draw_button_down$()		{ float	left$ = 22.0*owner.index/256; float right$ = 22.0*(owner.index+1)/256; owner.SetUVRect(left$,right$,0.172,0.258); }
+		draw_button_on_up$()	{ float left$ = 22.0*owner.index/256; float right$ = 22.0*(owner.index+1)/256; owner.SetUVRect(left$,right$,0.258,0.344); }
+		draw_button_on_hover$()	{ float left$ = 22.0*owner.index/256; float right$ = 22.0*(owner.index+1)/256; owner.SetUVRect(left$,right$,0.344,0.430); }
+		draw_button_on_down$()	{ float left$ = 22.0*owner.index/256; float right$ = 22.0*(owner.index+1)/256; owner.SetUVRect(left$,right$,0.430,0.516); }
+
+		activate_interfaces$()
+		{
+//			report.genericf("%s: activating allysium interfaces\n", skrit_name$);
+
+			bool ai_vis$ = UIShell.IsInterfaceVisible("ai_panel");
+			bool formation_vis$ = UIShell.IsInterfaceVisible("formation_panel");
+
+
+			UIShell.ActivateInterface("ui:interfaces:allysium:ai_panel", false);
+			UIShell.ActivateInterface("ui:interfaces:allysium:formation_panel", false);
+
+			UIShell.ActivateInterface("ui:interfaces:allysium:npc_rollover", false);
+			UIShell.ActivateInterface("ui:interfaces:allysium:info_rollover", false);
+			UIShell.ActivateInterface("ui:interfaces:allysium:monster_rollover", false);
+
+			// need to make sure panels are still visible after res change
+			if (ai_vis$) { UIShell.SendUIMessage(MSG_ONFORCECHECK, "message_handler", "ai_panel"); }
+			if (formation_vis$) { UIShell.SendUIMessage(MSG_ONFORCECHECK, "message_handler", "formation_panel"); }
+		}
+
+		check_positions$()
+		{
+			UIWindow wnd$;
+
+
+			int		bar_width$ = 576;
+
+
+			// center main bar
+			wnd$ = UIShell.FindUIWindow("mainbar_left", owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+				int left$ = (UIShell.ScreenWidth/2) - (bar_width$/2);
+				if (wnd$.left != left$)
+				{
+					report.genericf("%s: centering bar, moving %d\n",skrit_name$,left$-wnd$.left);
+					UIShell.ShiftGroup(owner.InterfaceParent, "mainbar", left$ - wnd$.left, 0);
+
+					// activate Allysium interfaces if necessary
+					activate_interfaces$();
+
+					// tell ai/formation panels screen res has changed
+					UIShell.SendUIMessage(MSG_ONCHECK, "message_handler", "ai_panel");
+					UIShell.SendUIMessage(MSG_ONCHECK, "message_handler", "formation_panel");
+
+				}
+			}
+
+			check_dialog_position$();
+			check_dialog_refresh$();
+
+
+			// check to see if field commands have resurfaced			
+			wnd$ = UIShell.FindUIWindow("button_collect_loot", "field_commands");
+			if (wnd$ != null)
+			{
+//				report.genericf("%s: field commands at %d,%d\n",skrit_name$,wnd$.left,wnd$.right);
+				if (wnd$.left < UIShell.ScreenWidth) { UIShell.ShiftInterface("field_commands", 300, 0); }
+			}
+/*
+			wnd$ = UIShell.FindUIWindow("button_compass_hide", "compass_hotpoints");
+			if (wnd$ != null)
+			{
+				report.genericf("%s: compass_hotpoints at %d,%d\n",skrit_name$,wnd$.left,wnd$.right);
+				if (wnd$.left < UIShell.ScreenWidth) { UIShell.ShiftInterface("compass_hotpoints", 300, 0); }
+			}
+*/
+		}
+
+		resize_potions$()
+		{
+//			report.genericf("%s: refresh\n",skrit_name$);
+
+			if (!UIShell.IsInterfaceVisible("field_commands")) { return; }
+
+			check_positions$();
+			check_follow_mode$();
+
+			Goid focus_goid$ = GoDB.GetFocusGo;
+			if (!focus_goid$.IsValid) { return; }
+
+			Go player_go$ = focus_goid$.go;
+
+			UIWindow wnd$ = UIShell.FindUIWindow("mana_full", owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+				int		bar_width$ = 42;
+
+				float percent$ = 1.0 * player_go$.Aspect.CurrentMana / player_go$.Aspect.MaxMana;
+				int new_right$ = wnd$.left + Math.ToInt(percent$ * bar_width$);
+
+				if (wnd$.right != new_right$)
+				{
+					wnd$.right = new_right$;
+					wnd$.SetUVRect(0.164, 0.164 + (percent$ * bar_width$/256), 0.000, 0.050);
+				}
+			}
+			wnd$ = UIShell.FindUIWindow("health_full", owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+				int		bar_width$ = 42;
+
+				float percent$ = 1.0 * player_go$.Aspect.CurrentLife / player_go$.Aspect.MaxLife;
+				int new_right$ = wnd$.left + Math.ToInt(percent$ * bar_width$);
+
+				if (wnd$.right != new_right$)
+				{
+					wnd$.right = new_right$;
+					wnd$.SetUVRect(0.000, 0.000 + (percent$ * bar_width$/256), 0.000, 0.050);
+				}
+			}
+		}
+
+		init$()
+		{
+			report.genericf("%s: init$()\n",skrit_name$);
+
+			UIShell.SendUIMessage(MSG_ONCHECK, "message_handler", "data_bar");
+
+			GameAuditor.GetDb.SetBool("dialog_open", false);
+			check_dialog_position$();
+
+			dialog_add_text$("Welcome to Allysium!\n");
+/*
+			int x$ = 0;
+			while (x$ < 10)
+			{
+				string s1$;
+				StringTool.AssignF(s1$,"line %d",x$);
+				dialog_add_text$(s1$);
+				x$ += 1;
+			}
+*/
+		}
+
+		fini$()
+		{
+			UIShell.DeactivateInterface("ai_panel");
+			UIShell.DeactivateInterface("formation_panel");
+
+			UIShell.DeactivateInterface("npc_rollover");
+			UIShell.DeactivateInterface("info_rollover");
+			UIShell.DeactivateInterface("monster_rollover");
+		}
+
+	]];
+
+
+	[t:window,n:message_handler]
+	{
+		alpha = 0.0;
+
+		[messages]
+		{
+			oncheck = call(resize_potions$);
+			onwheelup = call(dialog_open$); // & playsound(s_e_gui_element_button_SED);
+			onwheeldown = call(dialog_close$); // & playsound(s_e_gui_element_button_SED);
+			onitemplace = call(dialog_new_text$);
+			oncreated = call(init$);
+			ondestroyed = call(fini$);
+		}
+	}
+	[t:window,n:mainbar_left]
+	{
+		draw_order = 9;
+		rect = 0,0,192,81;
+		bottom_anchor = 81;
+		is_bottom_anchor = true;
+
+		texture = b_gui_ally_mainbar_1;
+		uvcoords = 0.000, 0.684, 0.750, 1.000;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+	}
+	[t:window,n:mainbar_center]
+	{
+		draw_order = 9;
+		rect = 192,0,384,81;
+		bottom_anchor = 81;
+		is_bottom_anchor = true;
+
+		texture = b_gui_ally_mainbar_1;
+		uvcoords = 0.000, 0.367, 0.750, 0.684;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+	}
+	[t:window,n:mainbar_right]
+	{
+		draw_order = 9;
+		rect = 384,0,576,81;
+		bottom_anchor = 81;
+		is_bottom_anchor = true;
+
+		texture = b_gui_ally_mainbar_2;
+		uvcoords = 0.000, 0.684, 0.750, 1.000;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+	}
+
+	[t:button,n:mainbar_button_1]
+	{
+		draw_order = 10;
+		rect = 113,33,135,55;
+		bottom_anchor = 48;
+		is_bottom_anchor = true;
+		is_common_control = false;
+
+		texture = b_gui_ally_mainbar_2;
+		wrap_mode = clamp;
+
+		index = 0;
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = button_selectall;
+
+		[messages]
+		{
+			onbuttonpress	= notify(select_all_members);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:button,n:mainbar_button_2]
+	{
+		draw_order = 10;
+		rect = 141,33,163,55;
+		bottom_anchor = 48;
+		is_bottom_anchor = true;
+		is_common_control = false;
+
+		texture = b_gui_ally_mainbar_2;
+		wrap_mode = clamp;
+
+		index = 1;
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = button_map_toggle;
+
+		[messages]
+		{
+			onbuttonpress	= notify(activate_mini_map);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:button,n:mainbar_button_3]
+	{
+		draw_order = 10;
+		rect = 168,33,190,55;
+		bottom_anchor = 48;
+		is_bottom_anchor = true;
+		is_common_control = false;
+
+		texture = b_gui_ally_mainbar_2;
+		wrap_mode = clamp;
+
+		index = 2;
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = collect_loot;
+
+		[messages]
+		{
+			onbuttonpress	= notify(collect_loot);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:button,n:mainbar_button_4]
+	{
+		draw_order = 10;
+		rect = 196,33,218,55;
+		bottom_anchor = 48;
+		is_bottom_anchor = true;
+		is_common_control = false;
+
+		texture = b_gui_ally_mainbar_2;
+		wrap_mode = clamp;
+
+		index = 3;
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = button_ai;
+
+		[messages]
+		{
+			onbuttonpress	= call(toggle_ai_panel$);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:checkbox,n:mainbar_button_5]
+	{
+		draw_order = 10;
+		rect = 358,33,380,55;
+		bottom_anchor = 48;
+		is_bottom_anchor = true;
+		is_common_control = false;
+
+		texture = b_gui_ally_mainbar_2;
+		wrap_mode = clamp;
+
+		index = 4;
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = follow_on;
+
+		[messages]
+		{
+			oncreated				= call(draw_button_up$);
+
+			oncheck					= call(toggle_follow$) & call(draw_button_on_up$) & setrolloverhelp(follow_off);
+			onuncheck				= call(toggle_follow$) & call(draw_button_up$) & setrolloverhelp(follow_on);
+//			onbuttonpress			= playsound(s_e_gui_element_button_SED);
+
+			onlbuttondown			= call(draw_button_down$);
+			onlbuttonup				= call(draw_button_up$);
+			onrolloff				= call(draw_button_up$);
+			onrollover				= call(draw_button_hover$);
+
+			onlbuttondownchecked	= call(draw_button_on_down$);
+			onlbuttonupchecked		= call(draw_button_on_up$);
+			onrolloffchecked		= call(draw_button_on_up$);
+			onrolloverchecked		= call(draw_button_on_hover$);
+
+		}
+	}
+	[t:button,n:mainbar_button_6]
+	{
+		draw_order = 10;
+		rect = 386,33,408,55;
+		bottom_anchor = 48;
+		is_bottom_anchor = true;
+		is_common_control = false;
+
+		texture = b_gui_ally_mainbar_2;
+		wrap_mode = clamp;
+
+		index = 5;
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = button_quest_toggle;
+
+		[messages]
+		{
+			onbuttonpress	= notify(toggle_quest_log);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+	[t:checkbox,n:mainbar_button_7]
+	{
+		draw_order = 10;
+		rect = 414,33,436,55;
+		bottom_anchor = 48;
+		is_bottom_anchor = true;
+		is_common_control = false;
+
+		texture = b_gui_ally_mainbar_2;
+		wrap_mode = clamp;
+
+		index = 6;
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = label_toggle;
+
+		[messages]
+		{
+			oncheck = notify(labels_on) & call(draw_button_up$);
+
+			oncreated		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+			onlbuttonup		= call(draw_button_up$);
+			onbuttonpress	= playsound(s_e_gui_element_button_SED);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+
+			onlbuttondownchecked	= call(draw_button_down$);
+			onlbuttonupchecked		= call(draw_button_up$);
+			onrolloffchecked		= call(draw_button_up$);
+			onrolloverchecked		= call(draw_button_hover$);
+
+			onuncheck = notify(labels_off) & call(draw_button_up$);
+		}
+	}
+	[t:button,n:mainbar_button_8]
+	{
+		draw_order = 10;
+		rect = 441,33,463,55;
+		bottom_anchor = 48;
+		is_bottom_anchor = true;
+		is_common_control = false;
+
+		texture = b_gui_ally_mainbar_2;
+		wrap_mode = clamp;
+
+		index = 7;
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = button_formation;
+
+		[messages]
+		{
+			onbuttonpress	= call(toggle_formation_panel$);
+			oncreated		= call(draw_button_up$);
+			onrolloff		= call(draw_button_up$);
+			onrollover		= call(draw_button_hover$);
+			onlbuttonup		= call(draw_button_up$);
+			onlbuttondown	= call(draw_button_down$);
+		}
+	}
+
+	[t:window,n:mana_full]
+	{
+		draw_order = 10;
+		rect = 307,38,307,51;
+		bottom_anchor = 43;
+		is_bottom_anchor = true;
+
+		texture = b_gui_ally_mainbar_1;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+	}
+	[t:window,n:mana_empty]
+	{
+		alpha = 0.00;
+		draw_order = 10;
+		rect = 305,36,351,53;
+		bottom_anchor = 45;
+		is_bottom_anchor = true;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = button_mana_potions;
+
+		[messages] { onlbuttonup = notify(drink_mana_potions); }
+	}
+	[t:window,n:health_full]
+	{
+		draw_order = 10;
+		rect = 228,38,228,51;
+		bottom_anchor = 43;
+		is_bottom_anchor = true;
+
+		texture = b_gui_ally_mainbar_1;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+	}
+	[t:window,n:health_empty]
+	{
+		alpha = 0.0;
+		draw_order = 10;
+		rect = 226,36,272,53;
+		bottom_anchor = 45;
+		is_bottom_anchor = true;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = button_health_potions;
+
+		[messages] { onlbuttonup = notify(drink_health_potions); }
+	}
+
+
+	// conversation panel
+	[t:window,n:dialog_border_left]
+	{
+		draw_order = 8;
+		rect = 0,48,32,180;
+
+		texture = b_gui_ally_dialog;
+		uvcoords = 0.000, 0.563, 0.125, 0.813;
+
+		group = dialog_box;
+//		dock_group = information_dockbar;
+	}
+	[t:window,n:dialog_border_topleft]
+	{
+		draw_order = 8;
+		rect = 0,0,128,48;
+
+		texture = b_gui_ally_dialog;
+		uvcoords = 0.000, 0.813, 0.500, 1.000;
+
+		group = dialog_box;
+//		dock_group = information_dockbar;
+	}
+	[t:window,n:dialog_border_top]
+	{
+		draw_order = 90;
+		rect = 116,0,244,48;
+
+		texture = b_gui_ally_dialog;
+		uvcoords = 0.000, 0.375, 0.500, 0.563;
+
+//		topmost=true;
+		group = dialog_box;
+//		dock_group = information_dockbar;
+	}
+	[t:window,n:dialog_border_topright]
+	{
+		draw_order = 8;
+		rect = 232,0,360,48;
+
+		texture = b_gui_ally_dialog;
+		uvcoords = 0.500, 0.813, 1.000, 1.000;
+
+		group = dialog_box;
+//		dock_group = information_dockbar;
+	}
+	[t:window,n:dialog_border_right]
+	{
+		draw_order = 8;
+		rect = 328,48,360,180;
+
+		texture = b_gui_ally_dialog;
+		uvcoords = 0.875, 0.563, 1.000, 0.813;
+
+		group = dialog_box;
+//		dock_group = information_dockbar;
+	}
+	[t:window,n:dialog_background]
+	{
+		draw_order = 8;
+		rect = 25,48,335,180;
+
+		background_fill = true;
+		background_color = 0x00000000;
+//		background_color = 0x00FF0000;
+
+		group = dialog_box;
+//		dock_group = information_dockbar;
+	}
+	[t:text_box,n:dialog_text]
+	{
+		draw_order = 8;
+		rect = 33,25,327,160;
+		fixed_location = true;
+		justify = left;
+		font_type = b_gui_fnt_12p_copperplate-light;
+
+//		background_fill = true;
+//		background_color = 0x00404040;
+		
+		group = dialog_box;
+	}
+	[t:text_box,n:dialog_text_cover]
+	{
+		draw_order = 9;
+		rect = 33,25,327,160;
+		fixed_location = true;
+		justify = left;
+		font_type = b_gui_fnt_12p_copperplate-light;
+
+		background_fill = true;
+		background_color = 0x00000000;
+		
+		group = dialog_box;
+	}
+
+
+	// conversation panel buttons
+	[t:checkbox,n:button_dialog]
+	{
+		draw_order = 10;
+		rect = 112,0,128,16;
+		is_common_control = false;
+		bottom_anchor = 76;
+		is_bottom_anchor = true;
+
+		texture = b_gui_ally_dialog;
+		wrap_mode = clamp;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+		rollover_help = dialog_toggle;
+
+		[messages]
+		{
+			oncheck = call(dialog_open$) & setuvcoords(0.125, 0.000, 0.188, 0.063) & playsound(s_e_gui_dialogue_open);
+			onuncheck = call(dialog_close$) & setuvcoords(0.000, 0.000, 0.063, 0.063) & notify(exit_dialogue) & playsound(s_e_frontend_tiny_button_aym);
+
+			oncreated		= setuvcoords(0.000, 0.000, 0.063, 0.063);
+			onlbuttondown	= setuvcoords(0.125, 0.000, 0.188, 0.063);
+			onlbuttonup		= setuvcoords(0.000, 0.000, 0.063, 0.063);
+//			onbuttonpress	= playsound(s_e_gui_element_button_SED);
+			onrolloff		= setuvcoords(0.000, 0.000, 0.063, 0.063);
+			onrollover		= setuvcoords(0.063, 0.000, 0.125, 0.063);
+
+			onlbuttondownchecked	= setuvcoords(0.000, 0.000, 0.063, 0.063);
+			onlbuttonupchecked		= setuvcoords(0.125, 0.000, 0.188, 0.063);
+			onrolloffchecked		= setuvcoords(0.125, 0.000, 0.188, 0.063);
+			onrolloverchecked		= setuvcoords(0.063, 0.000, 0.125, 0.063);
+		}
+	}
+	[t:button,n:dialog_button_up]
+	{
+		draw_order = 10;
+		rect = 450,0,464,14;
+		is_common_control = false;
+		bottom_anchor = 88;
+		is_bottom_anchor = true;
+
+		texture = b_gui_ally_dialog;
+		wrap_mode = clamp;
+
+		repeat_rate = 0.15;
+		repeater = true;
+
+		index = 0;
+		group = mainbar;
+		dock_group = information_dockbar;
+
+		[messages]
+		{
+			onbuttonpress	= call(dialog_scroll$);
+			oncreated		= setuvcoords(0.945, 0.000, 1.000, 0.055);
+			onrolloff		= setuvcoords(0.945, 0.000, 1.000, 0.055);
+			onrollover		= setuvcoords(0.945, 0.055, 1.000, 0.109);
+			onlbuttonup		= setuvcoords(0.945, 0.000, 1.000, 0.055);
+			onlbuttondown	= setuvcoords(0.945, 0.109, 1.000, 0.164);
+		}
+	}
+	[t:button,n:dialog_button_down]
+	{
+		draw_order = 10;
+		rect = 450,0,464,14;
+		is_common_control = false;
+		bottom_anchor = 74;
+		is_bottom_anchor = true;
+
+		texture = b_gui_ally_dialog;
+		wrap_mode = clamp;
+
+		repeat_rate = 0.15;
+		repeater = true;
+
+		index = 1;
+		group = mainbar;
+		dock_group = information_dockbar;
+
+		[messages]
+		{
+			onbuttonpress	= call(dialog_scroll$);
+			oncreated		= setuvcoords(0.891, 0.000, 0.945, 0.055);
+			onrolloff		= setuvcoords(0.891, 0.000, 0.945, 0.055);
+			onrollover		= setuvcoords(0.891, 0.055, 0.945, 0.109);
+			onlbuttonup		= setuvcoords(0.891, 0.000, 0.945, 0.055);
+			onlbuttondown	= setuvcoords(0.891, 0.109, 0.945, 0.164);
+		}
+	}
+
+
+
+
+	[t:button,n:button_health_potions]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 41;
+	  b common_control = false;
+		common_template = ;
+		disable_color = 0xff5f5f5f;
+		dock_group = information_dockbar;
+	  i draw_order = 4;
+		group = information_dockbar;
+		is_bottom_anchor = true;
+//		rect = 45,439,67,471;
+		rect = -1000,-1000,-1000,-1000;
+		rollover_help = button_health_potions;
+		texture = b_gui_ig_mnu_icon_health_up;
+		uvcoords = 0.000000,0.000000,0.687500,1.000000;
+		wrap_mode = clamp;
+		leftright_button = true;
+		[messages]
+		{
+			onbuttonpress = notify(drink_health_potions);
+			onlbuttondown = loadtexture(b_gui_ig_mnu_icon_health_dwn);
+			onlbuttonup = loadtexture(b_gui_ig_mnu_icon_health_up);
+			onrolloff = loadtexture(b_gui_ig_mnu_icon_health_up);
+			onrollover = loadtexture(b_gui_ig_mnu_icon_health_hov);
+		}
+	}
+	[t:button,n:button_open_dialog]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 41;
+	  b common_control = false;
+		common_template = ;
+		disable_color = 0xff5f5f5f;
+		dock_group = information_dockbar;
+	  i draw_order = 5;
+		group = information_dockbar;
+		is_bottom_anchor = true;
+//		rect = 71,439,93,471;
+		rect = -1000,-1000,-1000,-1000;
+		rollover_help = button_mana_potions;
+		texture = b_gui_ig_mnu_icon_mana_up;
+		uvcoords = 0.000000,0.000000,0.687500,1.000000;
+		wrap_mode = clamp;
+		leftright_button = true;
+		[messages]
+		{
+			onbuttonpress = notify(drink_mana_potions);
+			onlbuttondown = loadtexture(b_gui_ig_mnu_icon_mana_dwn);
+			onlbuttonup = loadtexture(b_gui_ig_mnu_icon_mana_up);
+			onrolloff = loadtexture(b_gui_ig_mnu_icon_mana_up);
+			onrollover = loadtexture(b_gui_ig_mnu_icon_mana_hov);
+		}
+	}
+	[t:checkbox,n:button_mega_map]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 41;
+	  b common_control = false;
+		common_template = ;
+		dock_group = information_dockbar;
+	  i draw_order = 7;
+		group = information_dockbar;
+		is_bottom_anchor = true;
+		is_right_anchor = true;
+//		rect = 541,439,568,470;
+		rect = -1000,-1000,-1000,-1000;
+		right_anchor = 99;
+		rollover_help = button_mega_map_on;
+		texture = b_gui_ig_mnu_icon_map_up;
+		uvcoords = 0.000000,0.031250,0.843750,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			onlbuttondown = loadtexture(b_gui_ig_mnu_icon_map_dwn);
+			onlbuttonup = loadtexture(b_gui_ig_mnu_icon_map_up);
+			onrolloff = loadtexture(b_gui_ig_mnu_icon_map_up);
+			onrollover = loadtexture(b_gui_ig_mnu_icon_map_hov);
+
+			oncheck = setrolloverhelp(button_mega_map_off) & notify(activate_mini_map) & playsound(s_e_gui_spell_book);
+
+			onlbuttondownchecked = loadtexture(b_gui_ig_mnu_icon_map_dwn);
+			onlbuttonupchecked = loadtexture(b_gui_ig_mnu_icon_map_up);
+			onrolloffchecked = loadtexture(b_gui_ig_mnu_icon_map_up);
+			onrolloverchecked = loadtexture(b_gui_ig_mnu_icon_map_hov);
+
+			onuncheck = setrolloverhelp(button_mega_map_on) & notify(activate_mini_map) & playsound(s_e_gui_spell_book);
+		}
+		leftright_button = true;
+	}
+	[t:button,n:button_menu]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 41;
+	  b common_control = false;
+		common_template = ;
+		dock_group = information_dockbar;
+	  i draw_order = 8;
+		group = information_dockbar;
+		is_bottom_anchor = true;
+		is_right_anchor = true;
+//		rect = 611,439,635,471;
+		rect = -1000,-1000,-1000,-1000;
+		right_anchor = 29;
+		rollover_help = button_menu;
+		texture = b_gui_ig_mnu_icon_door_up;
+		uvcoords = 0.000000,0.000000,0.750000,1.000000;
+		wrap_mode = clamp;
+		visible = true;
+		[messages]
+		{
+			onbuttonpress = notify(options_menu) & playsound(s_e_frontend_tiny_button_aym);
+			onlbuttondown = loadtexture(b_gui_ig_mnu_icon_door_dwn);
+			onlbuttonup = loadtexture(b_gui_ig_mnu_icon_door_up);
+			onrolloff = loadtexture(b_gui_ig_mnu_icon_door_up);
+			onrollover = loadtexture(b_gui_ig_mnu_icon_door_hov);
+		}
+		leftright_button = true;
+	}
+	[t:button,n:button_pause]
+	{
+		alpha = 0.00;
+		draw_order = 10;
+		rect = 273,31,303,61;
+		bottom_anchor = 50;
+		is_bottom_anchor = true;
+	    common_control = false;
+
+//		rect = 10,441,37,469;
+//		texture = b_gui_ig_mnu_icon_pause_up;
+//		uvcoords = 0.000000,0.125000,0.843750,1.000000;
+//		wrap_mode = clamp;
+
+		dock_group = information_dockbar;
+		group = mainbar;
+		rollover_help = button_play;
+
+		[messages]
+		{
+			onbuttonpress = notify(toggle_pause) & playsound(s_e_gui_element_button_SED);
+//			onlbuttondown = loadtexture(b_gui_ig_mnu_icon_pause_down);
+//			onlbuttonup = loadtexture(b_gui_ig_mnu_icon_pause_up);
+//			onrolloff = loadtexture(b_gui_ig_mnu_icon_pause_up);
+//			onrollover = loadtexture(b_gui_ig_mnu_icon_pause_hov);
+//			onstartanim = flashanimation(0.35,true);
+		}
+
+		leftright_button = true;
+	}
+	[t:button,n:button_play]
+	{
+		draw_order = 10;
+		rect = 273,31,303,61;
+		bottom_anchor = 50;
+		is_bottom_anchor = true;
+	    common_control = false;
+
+//		rect = 10,441,37,469;
+//		texture = b_gui_ig_mnu_icon_play_up;
+//		uvcoords = 0.000000,0.125000,0.843750,1.000000;
+
+		texture = b_gui_ally_mainbar_1;
+		uvcoords = 0.883, 0.000, 1.000, 0.117;
+		wrap_mode = clamp;
+
+		group = mainbar;
+		dock_group = information_dockbar;
+
+		visible = false;
+
+		[messages]
+		{
+			onbuttonpress = notify(toggle_pause) & playsound(s_e_gui_element_button_SED);
+//			onlbuttondown = loadtexture(b_gui_ig_mnu_icon_play_down);
+//			onlbuttonup = loadtexture(b_gui_ig_mnu_icon_play_up);
+//			onrolloff = loadtexture(b_gui_ig_mnu_icon_play_up);
+//			onrollover = loadtexture(b_gui_ig_mnu_icon_play_hov);
+//			onstartanim = flashanimation(0.35,true);
+		}
+
+		rollover_help = button_pause;
+		leftright_button = true;
+	}
+
+	[t:checkbox,n:button_quest_log]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 41;
+	  b common_control = false;
+		common_template = ;
+		dock_group = information_dockbar;
+	  i draw_order = 9;
+		group = information_dockbar;
+		is_bottom_anchor = true;
+		is_right_anchor = true;
+//		rect = 575,439,603,471;
+		rect = -1000,-1000,-1000,-1000;
+		right_anchor = 65;
+		rollover_help = button_quest_log_open;
+		texture = b_gui_ig_mnu_icon_book_up;
+		uvcoords = 0.000000,0.000000,0.875000,1.000000;
+		wrap_mode = clamp;
+		[messages]
+		{
+			oncheck			= notify(toggle_quest_log) & setrolloverhelp(button_quest_log_close);
+			onlbuttondown	= loadtexture(b_gui_ig_mnu_icon_book_dwn);
+			onlbuttonup		= loadtexture(b_gui_ig_mnu_icon_book_up);
+			onrolloff		= loadtexture(b_gui_ig_mnu_icon_book_up);
+			onrollover		= loadtexture(b_gui_ig_mnu_icon_book_hov);
+
+			onuncheck			= notify(toggle_quest_log) & setrolloverhelp(button_quest_log_open);
+			onlbuttondownchecked= loadtexture(b_gui_ig_mnu_icon_book_dwn);
+			onlbuttonupchecked	= loadtexture(b_gui_ig_mnu_icon_book_up);
+			onrolloffchecked	= loadtexture(b_gui_ig_mnu_icon_book_up);
+			onrolloverchecked	= loadtexture(b_gui_ig_mnu_icon_book_hov);
+		}
+	}
+	[t:window,n:window_quest_indicator]
+	{
+		is_bottom_anchor = true;
+		is_right_anchor = true;
+	  f alpha = 1.000000;
+	  b common_control = false;
+		common_template = ;
+	  i draw_order = 8;
+//		rect = 556,423,620,487;
+		rect = -1000,-1000,-1000,-1000;
+		right_anchor = 84;
+		bottom_anchor = 57;
+		texture = b_gui_ig_mnu_icon_book_red;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		visible = false;
+		dock_group = information_dockbar;
+		group = information_dockbar;
+
+		[messages]
+		{
+			onstartanim = flashanimation(0.2,true,1);
+		}
+	}
+	[t:dockbar,n:data_bar]
+	{
+//	  f alpha = 1.000000;
+		alpha = 0.00;
+	  i bottom_anchor = 31;
+	  b common_control = false;
+		common_template = ;
+		dock_group = information_dockbar;
+//		dockbar_type = dockbar_screen_y;
+	  i draw_order = 1;
+		group = information_dockbar;
+	  b is_bottom_anchor = true;
+		pass_through = true;
+		rect = 0,449,640,480;
+	  b stretch_x = true;
+		texture = b_gui_ig_mnu_statusbar;
+		uvcoords = 0.000000,0.000000,1.000000,0.861111;
+		wrap_mode = clamp;
+	}
+	[t:text,n:defeated_escape]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 150;
+		center_x = true;
+	  b common_control = false;
+		common_template = ;
+	  x draw_order = 40;
+	  x font_color = -1;
+	  x font_size = 0;
+		font_type = b_gui_fnt_12p_copperplate-light;
+		is_bottom_anchor = true;
+		justify = center;
+		rect = 70,330,570,348;
+		text = "Press escape for options.";
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		visible = false;
+		wrap_mode = clamp;
+	}
+	[t:text_box,n:text_box_info]
+	{
+	  f alpha = 1.000000;
+//	  i bottom_anchor = 30;
+		bottom_anchor = 14;
+	  b center_height = false;
+	  b common_control = false;
+		common_template = ;
+		dock_group = information_dockbar;
+	  i draw_order = 12;
+	  b fixed_location = true;
+		font_type = b_gui_fnt_12p_copperplate-light;
+		group = information_dockbar;
+	  b has_slider = false;
+	  b is_bottom_anchor = true;
+		justify = center;
+	  i max_height = 240;
+	  i max_width = 320;
+	  b pass_through = true;
+//		rect = 95,450,501,479;
+		rect = 0,0,290,14;
+	  f scroll_rate = 0.000000;
+//	  b stretch_x = true;
+	    center_x = true;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+	}
+	[t:checkbox,n:window_labels]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 39;
+	  b common_control = false;
+		common_template = ;
+		dock_group = information_dockbar;
+	  i draw_order = 42;
+		is_bottom_anchor = true;
+		is_right_anchor = true;
+		right_anchor = 133;
+//		rect = 507,439,539,471;
+		rect = -1000,-1000,-1000,-1000;
+		rollover_help = labels_indicator_on;
+		texture = b_gui_ig_mnu_label_up;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		group = information_dockbar;
+		[messages]
+		{
+			oncheck = notify(labels_on) & setrolloverhelp(labels_indicator_on) & loadtexture(b_gui_ig_mnu_label_up);
+
+			onlbuttondown = loadtexture(b_gui_ig_mnu_label_off_down);
+			onlbuttonup	= loadtexture(b_gui_ig_mnu_label_off_up);
+			onbuttonpress =  playsound(s_e_gui_element_button_SED);
+			onrolloff = loadtexture(b_gui_ig_mnu_label_off_up);
+			onrollover = loadtexture(b_gui_ig_mnu_label_off_hov);
+
+			onlbuttondownchecked = loadtexture(b_gui_ig_mnu_label_down);
+			onlbuttonupchecked	= loadtexture(b_gui_ig_mnu_label_up);
+			onrolloffchecked	= loadtexture(b_gui_ig_mnu_label_up);
+			onrolloverchecked	= loadtexture(b_gui_ig_mnu_label_hov);
+
+			onuncheck = notify(labels_off) & setrolloverhelp(labels_indicator_off) & loadtexture(b_gui_ig_mnu_label_off_up);
+		}
+	}
+
+	[t:window,n:window_lag]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 72;
+	  b common_control = false;
+		common_template = ;
+		dock_group = information_dockbar;
+	  i draw_order = 93;
+		group = information_dockbar;
+		is_bottom_anchor = true;
+		rect = 324,409,356,441;
+		texture = b_gui_ig_mnu_deadnet;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		visible = false;
+		center_x = true;
+		rollover_help = slow_network;
+	}
+	[t:window,n:window_slownet]
+	{
+	  f alpha = 1.000000;
+		bottom_anchor = 72;
+	  b common_control = false;
+		common_template = ;
+		dock_group = information_dockbar;
+	  i draw_order = 93;
+		group = information_dockbar;
+		is_bottom_anchor = true;
+		rect = 286,409,318,441;
+		rollover_help = slow_network;
+		texture = b_gui_ig_mnu_slownet;
+		uvcoords = 0.000000,0.000000,1.000000,1.000000;
+		wrap_mode = clamp;
+		visible = false;
+		center_x = true;
+	}
+}

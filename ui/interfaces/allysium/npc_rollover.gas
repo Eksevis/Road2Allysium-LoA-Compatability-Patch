@@ -1,0 +1,198 @@
+/////////////////////////////////////////////////////////////////////////////
+//
+// File        :  npc_rollover.gas
+// Author(s)   :  Major Hostility, Madigan
+// Description :
+//
+//
+//----------------------------------------------------------------------------
+// $Version: 0.02												$Date: 2004.01.31
+//----------------------------------------------------------------------------
+//
+// Version History:
+//
+//
+//   0.02	2004.01.31 (mh)										added drop-down 'status' display
+//
+//
+///////////////////////////////////////////////////////////////////////////////
+
+
+
+
+[npc_rollover]
+{
+  b interface = true;
+	centered_x = background;
+	intended_resolution_width = 640;
+	intended_resolution_height = 480;
+
+
+	skrit =
+	[[
+		owner = UIWindow;
+//		string skrit_name$ = "npc_rollover.gas";
+
+
+		string var_string$;
+		#include "k_inc_sfx_utils"
+
+
+		show$
+		{
+			goid goid$ = MakeGoid(GameAuditor.GetDb.GetInt("rollover_goid"));
+			if (goid$ == null) { return; }
+			if (!goid$.IsValid()) { return; }
+			if (!goid$.go.HasCommon()) { return; }
+			if (!goid$.go.HasAspect()) { return; }
+
+
+			string s1$;
+
+
+			// set rollover name
+			goid$.go.common.GetScreenName(s1$);
+			set_text$("text", owner.InterfaceParent, s1$);
+
+			// adjust life bar
+			UIWindow wnd$ = UIShell.FindUIWindow("bar", owner.InterfaceParent);
+			if (wnd$ != null)
+			{
+				float percent$ = goid$.go.Aspect.CurrentLife / goid$.go.Aspect.MaxLife;
+				if (percent$ > 1.0) { percent$ = 1.0; }
+
+				wnd$.SetRect(owner.left+0,owner.left+Math.Round(256*percent$),owner.top+0,owner.top+32,true);
+				wnd$.SetUVRect(0.0, percent$, 0.50, 0.75);
+			}
+
+
+			// check for second-level status text
+			wnd$ = UIShell.FindUIWindow("text_box_info", "data_bar");
+			if (wnd$ != null)
+			{
+				UITextBox tb$ = QueryDerivedTextBox(wnd$);
+				if (tb$ != null)
+				{
+					s1$ = tb$.GetLineText(1);
+					get_text$("status_text", owner.InterfaceParent);
+
+					if (s1$ != var_string$)
+					{
+						bool visible$ = (s1$ != "(null)" && s1$ != "");
+
+						set_text$("status_text", owner.InterfaceParent, s1$);
+						if (visible$)
+						{
+							int width$ = StringTool.StringWidth(s1$,18);
+
+							int shift$ = (width$ - 243)/2;
+							if (shift$ < 0) { shift$ = 0; }
+							else if (shift$ > 110) { shift$ = 110; }
+
+							int top$ = owner.top + 25;
+							int left$ = owner.left - shift$;
+							int right$ = owner.left+17 + shift$;
+							int art_width$ = 239;
+
+							set_rect$("status_left", owner.InterfaceParent, left$, left$+art_width$, top$, top$+24);
+							set_rect$("status_right", owner.InterfaceParent, right$, right$+art_width$, top$, top$+24);
+
+							set_rect$("status_text", owner.InterfaceParent, left$, right$+art_width$, top$+3, top$+19);
+						}
+
+						UIShell.ShowGroup("status", visible$, false, owner.InterfaceParent);
+					}
+				}
+			}
+
+
+			UIShell.ShowInterface(owner.InterfaceParent);
+		}
+		hide$
+		{
+			UIShell.HideInterface(owner.InterfaceParent);
+		}
+
+		init$
+		{
+			hide$();
+		}
+	]];
+
+
+	[t:dialog_box,n:background]
+	{
+		draw_order = 10;
+		rect = 0,0,256,32;
+		top_anchor = 50;
+		is_top_anchor = true;
+		texture = b_gui_ally_rollover_npc;
+		uvcoords = 0.0, 0.75, 1.0, 1.0;
+
+		[messages]
+		{
+			oncreated = call(init$);
+			onitemactivate = call(show$);
+			onitemdeactivate = call(hide$);
+		}
+	}
+	[t:window,n:bar]
+	{
+		draw_order = 11;
+		rect = 0,0,256,32;
+//		top_anchor=50;
+//		is_top_anchor = true;
+		texture = b_gui_ally_rollover_npc;
+		uvcoords = 0.0, 0.50, 1.0, 0.75;
+	}
+	[t:text,n:text]
+	{
+		draw_order = 12;
+		rect = 0,0,256,16;
+		top_anchor = 58;
+		is_top_anchor = true;
+		font_color = -1;
+		font_size = 16;
+		font_type = b_gui_fnt_16p_copperplate-light;
+		justify = center;
+		text = "OK";
+		type = text;
+	}
+	[t:text,n:status_text]
+	{
+		visible = false;
+		draw_order = 12;
+		rect = 0,0,256,16;
+//		top_anchor = 78;
+//		is_top_anchor = true;
+		font_color = 0xff5789e9;
+		font_size = 12;
+		font_type = b_gui_fnt_12p_copperplate-light;
+		justify = center;
+		text = "";
+		type = text;
+		group = status;
+	}
+	[t:window,n:status_left]
+	{
+		visible = false;
+		draw_order = 9;
+		rect = 0,0,256,24;
+//		top_anchor=81;
+//		is_top_anchor = true;
+		texture = b_gui_ally_rollover_npc;
+		uvcoords = 0.0, 0.25, 0.934, 0.438;
+		group = status;
+	}
+	[t:window,n:status_right]
+	{
+		visible = false;
+		draw_order = 9;
+		rect = 256,0,512,24;
+//		top_anchor=81;
+//		is_top_anchor = true;
+		texture = b_gui_ally_rollover_npc;
+		uvcoords = 0.07, 0.00, 1.00, 0.188;
+		group = status;
+	}
+}
